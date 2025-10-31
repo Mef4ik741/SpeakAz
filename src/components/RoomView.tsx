@@ -1,0 +1,697 @@
+import React, { useState, useEffect, useRef } from 'react'
+import { useParams } from 'react-router-dom'
+import { roomAPI } from '../services/api'
+import { Room, RoomParticipant } from '../types/Room'
+import { useAuth } from '../contexts/AuthContext'
+import roomWebSocketService from '../services/RoomWebSocketService'
+import webRTCService from '../services/WebRTCService'
+import { getUserIdFromToken } from '../utils/jwt'
+import { 
+  Mic, 
+  MicOff, 
+  Volume2, 
+  VolumeX, 
+  LogOut, 
+  Users, 
+  Crown, 
+  UserX,
+  Copy,
+  Settings
+} from 'lucide-react'
+
+interface RoomViewProps {
+  room: Room
+  onLeave: () => void
+}
+
+const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
+  const { user } = useAuth()
+  const { roomKey: urlRoomKey } = useParams<{ roomKey: string }>()
+  const [participants, setParticipants] = useState<RoomParticipant[]>(room.participants || [])
+  const [isMuted, setIsMuted] = useState(false)
+  const [isDeafened, setIsDeafened] = useState(false)
+  const [error, setError] = useState('')
+  const [showSettings, setShowSettings] = useState(false)
+  const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map())
+  const [webRTCInitialized, setWebRTCInitialized] = useState(false)
+  const [pendingParticipants, setPendingParticipants] = useState<RoomParticipant[]>([])
+  const isInitializedRef = useRef(false)
+  const heartbeatRef = useRef<NodeJS.Timeout>()
+  const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map())
+
+  const currentUser = participants.find(p => p.userId === user?.id)
+  const isOwner = currentUser?.isOwner || false
+
+  useEffect(() => {
+    if (isInitializedRef.current) {
+      console.log('RoomView: Already initialized, skipping');
+      return; // Предотвращаем дублирование инициализации
+    }
+    
+    // Проверяем авторизацию перед подключением WebSocket
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.warn('RoomView: No auth token found, WebSocket will not connect');
+      return;
+    }
+
+    console.log('RoomView: Auth token found, connecting WebSocket');
+    isInitializedRef.current = true;
+
+    // WebSocket подключение к комнате (используем roomKey из URL)
+    const actualRoomKey = urlRoomKey || room.roomKey;
+    console.log('RoomView: Using roomKey for WebSocket:', actualRoomKey);
+    roomWebSocketService.joinRoom(actualRoomKey);
+
+    // Инициализация WebRTC
+    const initializeWebRTC = async () => {
+      try {
+        console.log('RoomView: Checking user for WebRTC initialization:', user);
+        console.log('RoomView: User ID from context:', user?.id);
+        
+        // Получаем реальный userId из JWT токена
+        const realUserId = getUserIdFromToken();
+        console.log('RoomView: Real User ID from JWT:', realUserId);
+        
+        if (realUserId) {
+          console.log('RoomView: Initializing WebRTC...');
+          await webRTCService.initialize(actualRoomKey, realUserId);
+          setWebRTCInitialized(true);
+          console.log('RoomView: WebRTC initialized successfully');
+
+          // Setup WebRTC event handlers
+          webRTCService.onRemoteStream((userId: string, stream: MediaStream) => {
+            console.log('🎵 RoomView: Remote stream received from:', userId);
+            console.log('🎵 RoomView: Stream tracks:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })));
+            console.log('🎵 RoomView: Stream ID:', stream.id);
+            console.log('🎵 RoomView: Stream active:', stream.active);
+            
+            setRemoteStreams(prev => {
+              const newMap = new Map(prev.set(userId, stream));
+              console.log('🎵 RoomView: Updated remote streams map size:', newMap.size);
+              return newMap;
+            });
+            
+            // Create audio element for remote stream (hidden)
+            const audioElement = new Audio();
+            audioElement.srcObject = stream;
+            audioElement.autoplay = true;
+            audioElement.volume = 1.0;
+            audioElement.muted = false;
+            audioElement.setAttribute('data-user-id', userId);
+            
+            console.log('🔊 Audio element created for user:', userId);
+            console.log('🔊 Stream tracks:', stream.getTracks());
+            console.log('🔊 Stream active:', stream.active);
+            
+            // Add event listeners for debugging
+            audioElement.onloadedmetadata = () => {
+              console.log('🔊 Audio metadata loaded for user:', userId);
+            };
+            
+            audioElement.onplay = () => {
+              console.log('🔊 Audio started playing for user:', userId);
+            };
+            
+            audioElement.onerror = (error) => {
+              console.error('🔊 Audio error for user:', userId, error);
+            };
+            
+            // Try to play manually
+            audioElement.play().then(() => {
+              console.log('🔊 Audio play() succeeded for user:', userId);
+            }).catch(error => {
+              console.error('🔊 Audio play() failed for user:', userId, error);
+            });
+            
+            audioElementsRef.current.set(userId, audioElement);
+            
+            // Добавляем в DOM, но делаем невидимым
+            audioElement.style.display = 'none';
+            audioElement.style.position = 'absolute';
+            audioElement.style.left = '-9999px';
+            document.body.appendChild(audioElement);
+            
+            // Дополнительная проверка аудио контекста
+            if (window.AudioContext || (window as any).webkitAudioContext) {
+              const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+              const audioContext = new AudioContext();
+              console.log('🔊 Audio context state:', audioContext.state);
+              
+              if (audioContext.state === 'suspended') {
+                audioContext.resume().then(() => {
+                  console.log('🔊 Audio context resumed');
+                }).catch(err => {
+                  console.error('🔊 Failed to resume audio context:', err);
+                });
+              }
+            }
+          });
+
+          webRTCService.onRemoteStreamRemoved((userId: string) => {
+            console.log('RoomView: Remote stream removed from:', userId);
+            setRemoteStreams(prev => {
+              const newMap = new Map(prev);
+              newMap.delete(userId);
+              return newMap;
+            });
+            
+            // Remove audio element
+            const audioElement = audioElementsRef.current.get(userId);
+            if (audioElement) {
+              audioElement.pause();
+              audioElement.srcObject = null;
+              if (document.body.contains(audioElement)) {
+                document.body.removeChild(audioElement);
+              }
+              audioElementsRef.current.delete(userId);
+            }
+          });
+
+          webRTCService.onConnectionStateChange((userId: string, state: string) => {
+            console.log('RoomView: Connection state changed for', userId, ':', state);
+          });
+        } else {
+          console.warn('RoomView: Cannot initialize WebRTC - realUserId is missing');
+          console.log('RoomView: User object:', user);
+          console.log('RoomView: Token exists:', !!localStorage.getItem('token'));
+        }
+      } catch (error) {
+        console.error('RoomView: Failed to initialize WebRTC:', error);
+        setError('Не удалось получить доступ к микрофону. Проверьте разрешения браузера.');
+      }
+    };
+
+    initializeWebRTC();
+
+    // Обработчики WebSocket событий
+    const handleParticipantJoined = (message: any) => {
+      console.log('🎵 RoomView: Participant joined event received:', message);
+      
+      // Извлекаем userId из разных структур сообщения
+      const userId = message.participant?.userId || message.userId;
+      const username = message.participant?.username || message.username;
+      const joinedAt = message.participant?.joinedAt || message.timestamp;
+      
+      console.log('🔍 Participant data extracted:', { userId, username, joinedAt });
+      console.log('🔍 Original message.participant:', message.participant);
+      
+      if (!userId) {
+        console.warn('RoomView: No userId found in participant_joined message');
+        return;
+      }
+      
+      // Проверяем, что у нас есть минимальные данные
+      if (!username || username.trim() === '') {
+        console.warn('RoomView: No username found in participant_joined message, skipping');
+        return;
+      }
+      
+      // Добавляем участника в состояние
+      const participantData = {
+        userId,
+        username: username,
+        joinedAt,
+        isOwner: false,
+        isMuted: false
+      };
+      
+      setParticipants(prev => {
+        const exists = prev.some(p => p.userId === userId);
+        if (!exists) {
+          console.log('🎵 RoomView: Adding new participant to state:', participantData);
+          return [...prev, participantData];
+        }
+        console.log('🎵 RoomView: Participant already exists in state');
+        return prev;
+      });
+      
+      // WebRTC сервис теперь обрабатывает participant_joined автоматически через WebSocket
+      console.log('🎵 RoomView: WebRTC will handle this participant via WebSocket automatically');
+    };
+
+    const handleParticipantLeft = (message: any) => {
+      console.log('Participant left:', message);
+      setParticipants(prev => prev.filter(p => p.userId !== message.userId));
+    };
+
+    const handleRoomJoined = (message: any) => {
+      console.log('🎵 RoomView: Room joined event received:', message);
+      
+      // Устанавливаем флаг что пользователь успешно подключился к комнате
+      const actualRoomKey = urlRoomKey || room.roomKey;
+      const sessionKey = `room_session_${actualRoomKey}`;
+      sessionStorage.setItem(sessionKey, 'true');
+      console.log('🎵 RoomView: Set session storage for room:', actualRoomKey);
+      
+      // Обновляем список участников из сообщения
+      if (message.participants && Array.isArray(message.participants)) {
+        console.log('🎵 RoomView: Updating participants from room_joined:', message.participants);
+        
+        // Обновляем участников, сохраняя уже добавленных через participant_joined
+        setParticipants(prev => {
+          const newParticipants = [...prev];
+          
+          message.participants.forEach((serverParticipant: any) => {
+            // Извлекаем username из разных форматов (строчные и заглавные)
+            const username = serverParticipant.username || serverParticipant.Username;
+            const userId = serverParticipant.userId || serverParticipant.UserId;
+            const isMuted = serverParticipant.isMuted || serverParticipant.IsMuted || false;
+            const isOwner = serverParticipant.isOwner || serverParticipant.IsOwner || false;
+            const joinedAt = serverParticipant.joinedAt || serverParticipant.JoinedAt;
+            
+            // Пропускаем участников без username
+            if (!username || username.trim() === '') {
+              console.warn('RoomView: No username in room_joined participant, skipping:', serverParticipant);
+              return;
+            }
+            
+            const existingIndex = newParticipants.findIndex(p => p.userId === userId);
+            if (existingIndex >= 0) {
+              // Обновляем существующего участника с данными сервера
+              newParticipants[existingIndex] = {
+                ...newParticipants[existingIndex],
+                userId,
+                username,
+                isMuted,
+                isOwner,
+                joinedAt
+              };
+            } else {
+              // Добавляем нового участника
+              newParticipants.push({
+                userId,
+                username,
+                isMuted,
+                isOwner,
+                joinedAt
+              });
+            }
+          });
+          
+          return newParticipants;
+        });
+        
+        // Для каждого существующего участника (кроме себя) инициируем WebRTC соединение
+        // Но только после того, как WebRTC будет инициализирован
+        const realUserId = getUserIdFromToken();
+        const existingParticipants = message.participants.filter((p: RoomParticipant) => p.userId && p.userId !== realUserId);
+        
+        if (existingParticipants.length > 0) {
+          console.log('🎵 RoomView: Found existing participants:', existingParticipants.map((p: RoomParticipant) => p.userId));
+          
+          // Сохраняем участников для подключения после инициализации WebRTC
+          if (webRTCInitialized) {
+            existingParticipants.forEach((participant: RoomParticipant) => {
+              console.log('🎵 RoomView: Initiating WebRTC connection to existing participant:', participant.userId);
+              webRTCService.createOfferForUser(participant.userId);
+            });
+          } else {
+            // Если WebRTC еще не инициализирован, сохраняем участников для последующего подключения
+            console.log('🎵 RoomView: WebRTC not initialized yet, saving participants for later connection');
+            setPendingParticipants(existingParticipants);
+          }
+        }
+      }
+    };
+
+    const handleHeartbeatAck = (message: any) => {
+      console.log('Heartbeat acknowledged');
+    };
+
+    const handleJoinRoomError = (message: any) => {
+      console.warn('🎵 RoomView: Join room error (may be duplicate request):', message.message);
+      
+      // Не показываем ошибку пользователю, если это дублирующий запрос
+      // Основная функциональность работает, это минорная проблема
+      if (message.message?.includes('дублирование') || message.message?.includes('уже участвует')) {
+        console.log('🎵 RoomView: Ignoring duplicate join request error');
+        return;
+      }
+      
+      // Показываем ошибку только если это серьезная проблема
+      setError(message.message || 'Ошибка при подключении к комнате');
+    };
+
+    // Регистрируем обработчики
+    roomWebSocketService.on('participant_joined', handleParticipantJoined);
+    roomWebSocketService.on('participant_left', handleParticipantLeft);
+    roomWebSocketService.on('room_joined', handleRoomJoined);
+    roomWebSocketService.on('heartbeat_ack', handleHeartbeatAck);
+    roomWebSocketService.on('join_room_error', handleJoinRoomError);
+
+    // Heartbeat каждые 30 секунд через WebSocket
+    const startHeartbeat = () => {
+      heartbeatRef.current = setInterval(() => {
+        if (roomWebSocketService.isConnected()) {
+          roomWebSocketService.sendHeartbeat(room.roomKey);
+        } else {
+          // Fallback на REST API если WebSocket недоступен
+          roomAPI.heartbeat(room.roomKey).catch(error => {
+            console.error('Heartbeat failed:', error);
+          });
+        }
+      }, 30000);
+    };
+
+    startHeartbeat();
+
+    // Обработчик закрытия окна/вкладки
+    const handleBeforeUnload = () => {
+      const actualRoomKey = urlRoomKey || room.roomKey;
+      const sessionKey = `room_session_${actualRoomKey}`;
+      sessionStorage.removeItem(sessionKey);
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      // Очищаем обработчики
+      roomWebSocketService.off('participant_joined', handleParticipantJoined);
+      roomWebSocketService.off('participant_left', handleParticipantLeft);
+      roomWebSocketService.off('room_joined', handleRoomJoined);
+      roomWebSocketService.off('heartbeat_ack', handleHeartbeatAck);
+      roomWebSocketService.off('join_room_error', handleJoinRoomError);
+      
+      // Покидаем комнату
+      const actualRoomKey = urlRoomKey || room.roomKey;
+      roomWebSocketService.leaveRoom(actualRoomKey);
+      
+      // Очищаем sessionStorage
+      const sessionKey = `room_session_${actualRoomKey}`;
+      sessionStorage.removeItem(sessionKey);
+      
+      // Очищаем heartbeat
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
+      }
+      
+      // Сбрасываем флаг инициализации
+      isInitializedRef.current = false;
+      
+      // Cleanup WebRTC
+      if (webRTCInitialized) {
+        console.log('RoomView: Cleaning up WebRTC...');
+        webRTCService.disconnect();
+        
+        // Remove all audio elements
+        audioElementsRef.current.forEach((audioElement) => {
+          audioElement.pause();
+          audioElement.srcObject = null;
+          if (document.body.contains(audioElement)) {
+            document.body.removeChild(audioElement);
+          }
+        });
+        audioElementsRef.current.clear();
+      }
+
+      // Убираем обработчик beforeunload
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []) // Убираем зависимости, чтобы useEffect выполнился только один раз
+
+  // Подключаемся к участникам, которые были в комнате до нашего подключения
+  useEffect(() => {
+    if (webRTCInitialized && pendingParticipants.length > 0) {
+      console.log('🎵 RoomView: WebRTC initialized, connecting to pending participants:', pendingParticipants.map(p => p.userId));
+      
+      pendingParticipants.forEach((participant: RoomParticipant) => {
+        if (participant.userId) {
+          console.log('🎵 RoomView: Creating offer for pending participant:', participant.userId);
+          webRTCService.createOfferForUser(participant.userId);
+        }
+      });
+      
+      // Очищаем список ожидающих участников
+      setPendingParticipants([]);
+    }
+  }, [webRTCInitialized, pendingParticipants]);
+
+  const handleLeaveRoom = async () => {
+    if (confirm('Вы уверены, что хотите покинуть комнату?')) {
+      try {
+        await roomAPI.leaveRoom(room.roomKey)
+        console.log('RoomView: Successfully left room via API')
+      } catch (error: any) {
+        console.warn('RoomView: Error leaving room via API (this is often normal):', error.message)
+        // Не показываем ошибку пользователю - выход через WebSocket все равно сработает
+      }
+      
+      // Всегда вызываем onLeave для очистки состояния и выхода из комнаты
+      onLeave()
+    }
+  }
+
+  const handleMuteParticipant = async (participantId: string) => {
+    if (!isOwner) return
+
+    try {
+      await roomAPI.muteParticipant(room.roomKey, participantId)
+      // Обновляем локальное состояние
+      setParticipants(prev => 
+        prev.map(p => 
+          p.userId === participantId 
+            ? { ...p, isMuted: !p.isMuted }
+            : p
+        )
+      )
+    } catch (error: any) {
+      setError('Ошибка при изменении статуса участника')
+    }
+  }
+
+  const handleKickParticipant = async (participantId: string) => {
+    if (!isOwner) return
+
+    if (confirm('Вы уверены, что хотите исключить этого участника?')) {
+      try {
+        await roomAPI.kickParticipant(room.roomKey, participantId)
+        setParticipants(prev => prev.filter(p => p.userId !== participantId))
+      } catch (error: any) {
+        setError('Ошибка при исключении участника')
+      }
+    }
+  }
+
+  const copyRoomKey = () => {
+    navigator.clipboard.writeText(room.roomKey)
+    alert('Ключ комнаты скопирован!')
+  }
+
+  const toggleMute = () => {
+    const newMutedState = !isMuted;
+    setIsMuted(newMutedState);
+    
+    if (webRTCInitialized) {
+      webRTCService.setMuted(newMutedState);
+      console.log('RoomView: Microphone', newMutedState ? 'muted' : 'unmuted');
+    }
+  }
+
+  const toggleDeafen = () => {
+    const newDeafenedState = !isDeafened;
+    setIsDeafened(newDeafenedState);
+    
+    if (webRTCInitialized) {
+      webRTCService.setDeafened(newDeafenedState);
+      console.log('RoomView: Audio', newDeafenedState ? 'deafened' : 'undeafened');
+    }
+  }
+
+  return (
+    <div className="room-view">
+      <div className="room-header">
+        <div className="room-info">
+          <h1>{room.name}</h1>
+          <div className="room-meta">
+            <span className="participant-count">
+              <Users size={16} />
+              {participants.length}/{room.maxParticipants}
+            </span>
+            <button onClick={copyRoomKey} className="copy-key-btn">
+              <Copy size={16} />
+              Скопировать ключ
+            </button>
+          </div>
+        </div>
+
+        <div className="room-actions">
+          <button 
+            onClick={() => setShowSettings(!showSettings)}
+            className="settings-btn"
+          >
+            <Settings size={20} />
+          </button>
+          <button onClick={handleLeaveRoom} className="leave-btn">
+            <LogOut size={20} />
+            Покинуть
+          </button>
+        </div>
+      </div>
+
+      {showSettings && (
+        <div className="room-settings">
+          <div className="setting-item">
+            <span>Ключ комнаты:</span>
+            <code>{room.roomKey}</code>
+          </div>
+          <div className="setting-item">
+            <span>Владелец:</span>
+            <span>{room.ownerUsername}</span>
+          </div>
+          <div className="setting-item">
+            <span>Создана:</span>
+            <span>{new Date(room.createdAt).toLocaleString()}</span>
+          </div>
+        </div>
+      )}
+
+      {error && <div className="error-message">{error}</div>}
+
+      <div className="voice-area">
+        <div className="participants-grid">
+          {participants.map((participant, index) => (
+            <div 
+              key={participant.userId || `participant-${index}`} 
+              className={`participant-card ${participant.userId === user?.id ? 'current-user' : ''}`}
+            >
+              <div className="participant-avatar">
+                <div className="avatar-circle">
+                  {participant.username?.charAt(0)?.toUpperCase() || '?'}
+                </div>
+                {participant.isMuted && (
+                  <div className="mute-indicator">
+                    <MicOff size={12} />
+                  </div>
+                )}
+              </div>
+
+              <div className="participant-info">
+                <span className="participant-name">
+                  {participant.username || 'Неизвестный пользователь'}
+                  {participant.isOwner && (
+                    <Crown size={14} className="owner-icon" />
+                  )}
+                </span>
+                <span className="participant-status">
+                  {participant.userId === user?.id ? 'Вы' : 
+                   participant.isMuted ? 'Заглушен' : 'Активен'}
+                </span>
+              </div>
+
+              {isOwner && participant.userId !== user?.id && (
+                <div className="participant-controls">
+                  <button 
+                    onClick={() => handleMuteParticipant(participant.userId)}
+                    className={`control-btn ${participant.isMuted ? 'active' : ''}`}
+                    title={participant.isMuted ? 'Разглушить' : 'Заглушить'}
+                  >
+                    {participant.isMuted ? <Mic size={16} /> : <MicOff size={16} />}
+                  </button>
+                  <button 
+                    onClick={() => handleKickParticipant(participant.userId)}
+                    className="control-btn kick-btn"
+                    title="Исключить"
+                  >
+                    <UserX size={16} />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="voice-controls">
+          <button 
+            onClick={toggleMute}
+            className={`voice-btn ${isMuted ? 'muted' : ''}`}
+            title={isMuted ? 'Включить микрофон' : 'Выключить микрофон'}
+          >
+            {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
+            <span>{isMuted ? 'Включить микрофон' : 'Выключить микрофон'}</span>
+          </button>
+
+          <button 
+            onClick={toggleDeafen}
+            className={`voice-btn ${isDeafened ? 'deafened' : ''}`}
+            title={isDeafened ? 'Включить звук' : 'Выключить звук'}
+          >
+            {isDeafened ? <VolumeX size={24} /> : <Volume2 size={24} />}
+            <span>{isDeafened ? 'Включить звук' : 'Выключить звук'}</span>
+          </button>
+
+          {/* Кнопка для диагностики аудио */}
+          <button 
+            onClick={async () => {
+              console.log('🔊 === AUDIO DIAGNOSTICS ===');
+              
+              // Проверяем аудио устройства
+              try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const audioOutputs = devices.filter(d => d.kind === 'audiooutput');
+                const audioInputs = devices.filter(d => d.kind === 'audioinput');
+                
+                console.log('🔊 Audio output devices:', audioOutputs);
+                console.log('🔊 Audio input devices:', audioInputs);
+                
+                // Проверяем все аудио элементы
+                const audioElements = document.querySelectorAll('audio');
+                console.log('🔊 Audio elements in DOM:', audioElements.length);
+                
+                audioElements.forEach((audio, index) => {
+                  console.log(`🔊 Audio element ${index}:`, {
+                    src: audio.src,
+                    srcObject: audio.srcObject,
+                    volume: audio.volume,
+                    muted: audio.muted,
+                    paused: audio.paused,
+                    readyState: audio.readyState,
+                    userId: audio.getAttribute('data-user-id')
+                  });
+                  
+                  // Пытаемся воспроизвести
+                  if (audio.paused) {
+                    audio.play().catch(err => console.error('🔊 Failed to play audio:', err));
+                  }
+                });
+                
+                // Проверяем remote streams
+                console.log('🔊 Remote streams:', remoteStreams);
+                
+              } catch (error) {
+                console.error('🔊 Audio diagnostics error:', error);
+              }
+            }}
+            className="voice-btn"
+            title="Диагностика аудио"
+            style={{ backgroundColor: '#4CAF50', color: 'white' }}
+          >
+            🔊 <span>Диагностика</span>
+          </button>
+
+        </div>
+      </div>
+
+      <div className="room-footer">
+        <div className="connection-status">
+          <div className={`status-indicator ${webRTCInitialized ? 'connected' : 'connecting'}`}></div>
+          <span>
+            {webRTCInitialized 
+              ? 'Подключено к голосовой комнате' 
+              : 'Подключение к голосовой комнате...'
+            }
+          </span>
+        </div>
+        
+        <div className="room-info-footer">
+          <span>Комната будет автоматически удалена через 20 минут неактивности</span>
+          {remoteStreams.size > 0 && (
+            <span> • Активных соединений: {remoteStreams.size}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default RoomView
