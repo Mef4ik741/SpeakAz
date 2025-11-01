@@ -81,6 +81,105 @@ body {
   opacity: 1;
 }
 
+/* Download button styles */
+.nav-item.download-btn {
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Градиентный фон при наведении */
+.nav-item.download-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #28a745, #20c997, #17a2b8);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: -1;
+}
+
+/* Анимированная полоска */
+.nav-item.download-btn::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: -100%;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, #ffd700, #ffed4e, #ffd700);
+  transition: left 0.4s ease-out;
+}
+
+.nav-item.download-btn:hover::before {
+  opacity: 1;
+}
+
+.nav-item.download-btn:hover::after {
+  left: 0;
+}
+
+.nav-item.download-btn:hover {
+  color: #fff;
+  border-left-color: #ffd700;
+  transform: translateX(4px) scale(1.02);
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+}
+
+/* Анимация иконки */
+.nav-item.download-btn svg {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  filter: drop-shadow(0 0 0 transparent);
+}
+
+.nav-item.download-btn:hover svg {
+  transform: translateY(3px) rotate(5deg);
+  filter: drop-shadow(0 2px 4px rgba(255, 215, 0, 0.5));
+}
+
+/* Пульсирующий эффект */
+.nav-item.download-btn:hover {
+  animation: downloadPulse 1.5s infinite;
+}
+
+@keyframes downloadPulse {
+  0%, 100% {
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+  }
+  50% {
+    box-shadow: 0 6px 20px rgba(40, 167, 69, 0.5), 0 0 0 4px rgba(40, 167, 69, 0.1);
+  }
+}
+
+/* Эффект "блеска" текста */
+.nav-item.download-btn:hover {
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: downloadPulse 1.5s infinite, textShine 2s infinite;
+}
+
+@keyframes textShine {
+  0% {
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
+  }
+  50% {
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.6), 0 0 15px rgba(255, 215, 0, 0.4);
+  }
+  100% {
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
+  }
+}
+
 .nav-divider {
   height: 1px;
   background: #404040;
@@ -1015,6 +1114,22 @@ body {
   padding: 1rem;
   border: 2px solid #dc3545;
   margin: 1rem 0;
+  border-radius: 8px;
+}
+
+.error-message.room-not-found {
+  background: #2d2419;
+  color: #ffeaa7;
+  border-color: #f39c12;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.error-message.room-not-found::before {
+  content: "⚠️";
+  font-size: 1.5rem;
+  align-self: flex-start;
 }
 
 .empty-state {

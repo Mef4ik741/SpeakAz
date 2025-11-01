@@ -1,0 +1,42 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1976d2;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#5c6bc0;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Фон -->
+  <rect width="256" height="256" rx="32" fill="url(#gradient)"/>
+  
+  <!-- Микрофон -->
+  <g transform="translate(128, 128)">
+    <!-- Корпус микрофона -->
+    <rect x="-20" y="-40" width="40" height="60" rx="20" fill="white" opacity="0.9"/>
+    
+    <!-- Решетка микрофона -->
+    <line x1="-12" y1="-30" x2="12" y2="-30" stroke="#1976d2" stroke-width="2"/>
+    <line x1="-12" y1="-20" x2="12" y2="-20" stroke="#1976d2" stroke-width="2"/>
+    <line x1="-12" y1="-10" x2="12" y2="-10" stroke="#1976d2" stroke-width="2"/>
+    <line x1="-12" y1="0" x2="12" y2="0" stroke="#1976d2" stroke-width="2"/>
+    <line x1="-12" y1="10" x2="12" y2="10" stroke="#1976d2" stroke-width="2"/>
+    
+    <!-- Стойка -->
+    <rect x="-2" y="20" width="4" height="30" fill="white" opacity="0.9"/>
+    
+    <!-- Основание -->
+    <ellipse cx="0" cy="55" rx="25" ry="8" fill="white" opacity="0.9"/>
+    
+    <!-- Звуковые волны -->
+    <path d="M 35 -20 Q 45 -10 35 0" stroke="white" stroke-width="3" fill="none" opacity="0.7"/>
+    <path d="M 40 -25 Q 55 -10 40 5" stroke="white" stroke-width="3" fill="none" opacity="0.5"/>
+    <path d="M 45 -30 Q 65 -10 45 10" stroke="white" stroke-width="3" fill="none" opacity="0.3"/>
+    
+    <path d="M -35 -20 Q -45 -10 -35 0" stroke="white" stroke-width="3" fill="none" opacity="0.7"/>
+    <path d="M -40 -25 Q -55 -10 -40 5" stroke="white" stroke-width="3" fill="none" opacity="0.5"/>
+    <path d="M -45 -30 Q -65 -10 -45 10" stroke="white" stroke-width="3" fill="none" opacity="0.3"/>
+  </g>
+  
+  <!-- Текст -->
+  <text x="128" y="220" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="white">SpeakAz</text>
+</svg>

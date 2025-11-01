@@ -1,10 +1,38 @@
-import React from 'react'
-import { Outlet, Link, useLocation } from 'react-router-dom'
+import React, { useEffect } from 'react'
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useElectron } from '../hooks/useElectron'
 
 const Layout: React.FC = () => {
   const { user, logout } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
+  const { isElectron, electronAPI, showNotification } = useElectron()
+
+  useEffect(() => {
+    if (electronAPI) {
+      // Настраиваем обработчики событий от main процесса
+      electronAPI.onCreateRoom(() => {
+        navigate('/create')
+      })
+
+      electronAPI.onJoinRoom(() => {
+        navigate('/join')
+      })
+
+      electronAPI.onOpenSettings(() => {
+        // TODO: Открыть модальное окно настроек
+        showNotification('Настройки', 'Окно настроек будет добавлено в следующей версии')
+      })
+
+      // Очистка при размонтировании
+      return () => {
+        electronAPI.removeAllListeners('create-room')
+        electronAPI.removeAllListeners('join-room')
+        electronAPI.removeAllListeners('open-settings')
+      }
+    }
+  }, [electronAPI, navigate, showNotification])
 
   return (
     <div className="app-layout">
@@ -17,6 +45,18 @@ const Layout: React.FC = () => {
               <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
             </svg>
             SpeakAz
+            {isElectron && (
+              <span style={{ 
+                fontSize: '0.7rem', 
+                opacity: 0.7, 
+                marginLeft: '0.5rem',
+                backgroundColor: '#5c6bc0',
+                padding: '0.2rem 0.4rem',
+                borderRadius: '0.3rem'
+              }}>
+                Desktop
+              </span>
+            )}
           </h1>
         </div>
 
@@ -58,6 +98,34 @@ const Layout: React.FC = () => {
           )}
           
           <div className="nav-divider"></div>
+          
+          {!isElectron && (
+            <button 
+              onClick={() => {
+                const downloadUrl = 'https://github.com/Mef4ik741/SpeakAz.exe/releases/download/v1.0.0/SpeakAz.Setup.1.0.0.exe'
+                
+                // Создаем невидимую ссылку для скачивания
+                const link = document.createElement('a')
+                link.href = downloadUrl
+                link.download = 'SpeakAz.Setup.1.0.0.exe'
+                link.target = '_blank'
+                document.body.appendChild(link)
+                link.click()
+                document.body.removeChild(link)
+                
+                // Показываем уведомление
+                if (showNotification) {
+                  showNotification('Скачивание началось', 'Проверьте папку "Загрузки"')
+                }
+              }}
+              className="nav-item download-btn"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+              </svg>
+              Загрузить приложение
+            </button>
+          )}
           
           <Link 
             to="/api-test"

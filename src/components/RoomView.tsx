@@ -31,6 +31,7 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
   const [isMuted, setIsMuted] = useState(false)
   const [isDeafened, setIsDeafened] = useState(false)
   const [error, setError] = useState('')
+  const [errorType, setErrorType] = useState<'general' | 'room-not-found'>('general')
   const [showSettings, setShowSettings] = useState(false)
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map())
   const [webRTCInitialized, setWebRTCInitialized] = useState(false)
@@ -61,6 +62,16 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
     // WebSocket подключение к комнате (используем roomKey из URL)
     const actualRoomKey = urlRoomKey || room.roomKey;
     console.log('RoomView: Using roomKey for WebSocket:', actualRoomKey);
+    
+    // Проверяем валидность roomKey перед подключением
+    if (!actualRoomKey || actualRoomKey.trim() === '') {
+      console.error('RoomView: Invalid roomKey, cannot connect to WebSocket');
+      setErrorType('room-not-found');
+      setError('Неверный ключ комнаты. Перенаправление на список комнат...');
+      setTimeout(() => onLeave(), 3000);
+      return;
+    }
+    
     roomWebSocketService.joinRoom(actualRoomKey);
 
     // Инициализация WebRTC
@@ -178,6 +189,7 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
         }
       } catch (error) {
         console.error('RoomView: Failed to initialize WebRTC:', error);
+        setErrorType('general');
         setError('Не удалось получить доступ к микрофону. Проверьте разрешения браузера.');
       }
     };
@@ -329,8 +341,24 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
         return;
       }
       
+      // Обрабатываем специфические ошибки
+      const errorMessage = message.message || 'Ошибка при подключении к комнате';
+      
+      if (errorMessage.includes('не найдена') || errorMessage.includes('неактивна')) {
+        console.error('🎵 RoomView: Room not found or inactive, redirecting to rooms list');
+        setErrorType('room-not-found');
+        setError('Комната не найдена или была удалена из-за неактивности. Перенаправление на список комнат...');
+        
+        // Автоматически перенаправляем на список комнат через 3 секунды
+        setTimeout(() => {
+          onLeave();
+        }, 3000);
+        return;
+      }
+      
       // Показываем ошибку только если это серьезная проблема
-      setError(message.message || 'Ошибка при подключении к комнате');
+      setErrorType('general');
+      setError(errorMessage);
     };
 
     // Регистрируем обработчики
@@ -456,6 +484,7 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
         )
       )
     } catch (error: any) {
+      setErrorType('general');
       setError('Ошибка при изменении статуса участника')
     }
   }
@@ -468,6 +497,7 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
         await roomAPI.kickParticipant(room.roomKey, participantId)
         setParticipants(prev => prev.filter(p => p.userId !== participantId))
       } catch (error: any) {
+        setErrorType('general');
         setError('Ошибка при исключении участника')
       }
     }
@@ -546,7 +576,14 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
         </div>
       )}
 
-      {error && <div className="error-message">{error}</div>}
+      {error && (
+        <div className={`error-message ${errorType}`}>
+          {error}
+          {errorType === 'room-not-found' && (
+            <small>Комнаты автоматически удаляются через 20 минут неактивности</small>
+          )}
+        </div>
+      )}
 
       <div className="voice-area">
         <div className="participants-grid">
