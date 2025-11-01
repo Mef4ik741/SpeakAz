@@ -30,6 +30,7 @@ const RoomPage: React.FC = () => {
       }
 
       // Проверяем, был ли пользователь уже в этой комнате
+      // Используем roomKey из URL (который на самом деле roomId) для проверки сессии
       const sessionKey = `room_session_${roomKey}`
       const wasInRoom = sessionStorage.getItem(sessionKey)
 

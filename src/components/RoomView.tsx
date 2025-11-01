@@ -59,9 +59,11 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
     console.log('RoomView: Auth token found, connecting WebSocket');
     isInitializedRef.current = true;
 
-    // WebSocket подключение к комнате (используем roomKey из URL)
-    const actualRoomKey = urlRoomKey || room.roomKey;
+    // WebSocket подключение к комнате (всегда используем room.roomKey, не URL параметр)
+    const actualRoomKey = room.roomKey;
     console.log('RoomView: Using roomKey for WebSocket:', actualRoomKey);
+    console.log('RoomView: URL roomKey (roomId):', urlRoomKey);
+    console.log('RoomView: Actual roomKey from room object:', room.roomKey);
     
     // Проверяем валидность roomKey перед подключением
     if (!actualRoomKey || actualRoomKey.trim() === '') {
@@ -251,10 +253,10 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
       console.log('🎵 RoomView: Room joined event received:', message);
       
       // Устанавливаем флаг что пользователь успешно подключился к комнате
-      const actualRoomKey = urlRoomKey || room.roomKey;
-      const sessionKey = `room_session_${actualRoomKey}`;
+      // Используем roomId из URL для sessionStorage (для совместимости с RoomPage)
+      const sessionKey = `room_session_${urlRoomKey}`;
       sessionStorage.setItem(sessionKey, 'true');
-      console.log('🎵 RoomView: Set session storage for room:', actualRoomKey);
+      console.log('🎵 RoomView: Set session storage for roomId:', urlRoomKey);
       
       // Обновляем список участников из сообщения
       if (message.participants && Array.isArray(message.participants)) {
@@ -386,8 +388,7 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
 
     // Обработчик закрытия окна/вкладки
     const handleBeforeUnload = () => {
-      const actualRoomKey = urlRoomKey || room.roomKey;
-      const sessionKey = `room_session_${actualRoomKey}`;
+      const sessionKey = `room_session_${urlRoomKey}`;
       sessionStorage.removeItem(sessionKey);
     };
 
@@ -402,11 +403,11 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
       roomWebSocketService.off('join_room_error', handleJoinRoomError);
       
       // Покидаем комнату
-      const actualRoomKey = urlRoomKey || room.roomKey;
+      const actualRoomKey = room.roomKey;
       roomWebSocketService.leaveRoom(actualRoomKey);
       
       // Очищаем sessionStorage
-      const sessionKey = `room_session_${actualRoomKey}`;
+      const sessionKey = `room_session_${urlRoomKey}`;
       sessionStorage.removeItem(sessionKey);
       
       // Очищаем heartbeat
