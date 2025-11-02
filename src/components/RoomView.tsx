@@ -87,10 +87,12 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
         console.log('RoomView: Real User ID from JWT:', realUserId);
         
         if (realUserId) {
-          console.log('RoomView: Initializing WebRTC...');
+          console.log('🔧 RoomView: Initializing WebRTC...');
+          console.log('🔧 RoomView: WebRTC state before initialization:', webRTCService.getState());
           await webRTCService.initialize(actualRoomKey, realUserId);
           setWebRTCInitialized(true);
-          console.log('RoomView: WebRTC initialized successfully');
+          console.log('🔧 RoomView: WebRTC initialized successfully');
+          console.log('🔧 RoomView: WebRTC state after initialization:', webRTCService.getState());
 
           // Setup WebRTC event handlers
           webRTCService.onRemoteStream((userId: string, stream: MediaStream) => {
@@ -245,8 +247,17 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
     };
 
     const handleParticipantLeft = (message: any) => {
-      console.log('Participant left:', message);
-      setParticipants(prev => prev.filter(p => p.userId !== message.userId));
+      console.log('🚪 RoomView: Participant left event received:', message);
+      console.log('🚪 RoomView: Current participants before removal:', participants.map(p => ({ userId: p.userId, username: p.username })));
+      
+      setParticipants(prev => {
+        const filtered = prev.filter(p => p.userId !== message.userId);
+        console.log('🚪 RoomView: Participants after removal:', filtered.map(p => ({ userId: p.userId, username: p.username })));
+        return filtered;
+      });
+      
+      // WebRTC соединения будут автоматически очищены при закрытии peer connection
+      console.log('🚪 RoomView: Participant removed from UI, WebRTC cleanup will happen automatically');
     };
 
     const handleRoomJoined = (message: any) => {
@@ -420,11 +431,16 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
       
       // Cleanup WebRTC
       if (webRTCInitialized) {
-        console.log('RoomView: Cleaning up WebRTC...');
+        console.log('🔧 RoomView: Starting WebRTC cleanup...');
+        console.log('🔧 RoomView: WebRTC state before cleanup:', webRTCService.getState());
+        
+        // Disconnect WebRTC service
         webRTCService.disconnect();
         
         // Remove all audio elements
-        audioElementsRef.current.forEach((audioElement) => {
+        console.log('🔧 RoomView: Removing audio elements:', audioElementsRef.current.size);
+        audioElementsRef.current.forEach((audioElement, userId) => {
+          console.log('🔧 RoomView: Removing audio element for user:', userId);
           audioElement.pause();
           audioElement.srcObject = null;
           if (document.body.contains(audioElement)) {
@@ -432,6 +448,12 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
           }
         });
         audioElementsRef.current.clear();
+        
+        // Reset WebRTC initialization flag
+        setWebRTCInitialized(false);
+        
+        console.log('🔧 RoomView: WebRTC cleanup completed');
+        console.log('🔧 RoomView: WebRTC state after cleanup:', webRTCService.getState());
       }
 
       // Убираем обработчик beforeunload
@@ -458,12 +480,25 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
 
   const handleLeaveRoom = async () => {
     if (confirm('Вы уверены, что хотите покинуть комнату?')) {
+      console.log('RoomView: Starting leave room process...')
+      
+      // Сначала отправляем WebSocket уведомление для реал-тайм обновления
       try {
+        console.log('RoomView: Sending WebSocket leave room message...')
+        roomWebSocketService.leaveRoom(room.roomKey)
+      } catch (error: any) {
+        console.warn('RoomView: Error sending WebSocket leave message:', error.message)
+      }
+      
+      // Затем вызываем API для обновления базы данных (может быть уже обновлена через WebSocket)
+      try {
+        console.log('RoomView: Calling API leave room...')
         await roomAPI.leaveRoom(room.roomKey)
         console.log('RoomView: Successfully left room via API')
       } catch (error: any) {
-        console.warn('RoomView: Error leaving room via API (this is often normal):', error.message)
-        // Не показываем ошибку пользователю - выход через WebSocket все равно сработает
+        console.warn('RoomView: API leave room failed (this is normal if WebSocket already processed the leave):', error.message)
+        // Это нормально - WebSocket уже мог обновить БД, поэтому API возвращает ошибку
+        // Не показываем ошибку пользователю, так как выход через WebSocket уже сработал
       }
       
       // Всегда вызываем onLeave для очистки состояния и выхода из комнаты

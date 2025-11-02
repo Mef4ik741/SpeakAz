@@ -31,6 +31,21 @@ class WebRTCService {
   async initialize(roomKey: string, userId: string): Promise<void> {
     console.log('🎵 WebRTCService: Starting initialization for room:', roomKey, 'user:', userId);
     
+    // Check if already initialized and clean up if necessary
+    if (this.isInitialized) {
+      console.warn('🎵 WebRTCService: Already initialized, cleaning up first...');
+      this.disconnect();
+    }
+    
+    // Ensure clean state
+    const currentState = this.getState();
+    console.log('🎵 WebRTCService: Current state before initialization:', currentState);
+    
+    if (currentState.peerConnectionsCount > 0 || currentState.remoteStreamsCount > 0 || currentState.localStreamActive) {
+      console.warn('🎵 WebRTCService: Found leftover connections, forcing cleanup...');
+      this.disconnect();
+    }
+    
     this.roomKey = roomKey;
     this.userId = userId;
 
@@ -126,6 +141,16 @@ class WebRTCService {
   // Create peer connection for a user
   private createPeerConnection(remoteUserId: string): RTCPeerConnection {
     console.log('WebRTCService: Creating peer connection for user:', remoteUserId);
+    
+    // Check if peer connection already exists
+    if (this.peerConnections.has(remoteUserId)) {
+      console.warn('WebRTCService: Peer connection already exists for user:', remoteUserId, 'closing old one...');
+      const oldPc = this.peerConnections.get(remoteUserId);
+      if (oldPc) {
+        oldPc.close();
+      }
+      this.peerConnections.delete(remoteUserId);
+    }
 
     const pc = new RTCPeerConnection(this.config);
 
@@ -510,33 +535,83 @@ class WebRTCService {
 
   // Cleanup
   disconnect(): void {
-    console.log('WebRTCService: Disconnecting...');
+    console.log('🎵 WebRTCService: Starting complete disconnect and cleanup...');
+    console.log('🎵 WebRTCService: Current state before cleanup:', {
+      isInitialized: this.isInitialized,
+      peerConnections: this.peerConnections.size,
+      remoteStreams: this.remoteStreams.size,
+      hasLocalStream: !!this.localStream
+    });
 
     // Close all peer connections
+    console.log('🎵 WebRTCService: Closing peer connections:', this.peerConnections.size);
     this.peerConnections.forEach((pc, userId) => {
+      console.log('🎵 WebRTCService: Closing peer connection for:', userId);
       pc.close();
     });
     this.peerConnections.clear();
 
     // Stop all remote streams
-    this.remoteStreams.forEach((stream) => {
-      stream.getTracks().forEach(track => track.stop());
+    console.log('🎵 WebRTCService: Stopping remote streams:', this.remoteStreams.size);
+    this.remoteStreams.forEach((stream, userId) => {
+      console.log('🎵 WebRTCService: Stopping remote stream for:', userId);
+      stream.getTracks().forEach(track => {
+        console.log('🎵 WebRTCService: Stopping remote track:', track.kind, track.label);
+        track.stop();
+      });
     });
     this.remoteStreams.clear();
 
     // Stop local stream
     if (this.localStream) {
-      this.localStream.getTracks().forEach(track => track.stop());
+      console.log('🎵 WebRTCService: Stopping local stream tracks...');
+      this.localStream.getTracks().forEach(track => {
+        console.log('🎵 WebRTCService: Stopping local track:', track.kind, track.label);
+        track.stop();
+      });
       this.localStream = null;
     }
 
+    // Clear all handlers
+    console.log('🎵 WebRTCService: Clearing event handlers...');
+    this.onRemoteStreamHandler = null;
+    this.onRemoteStreamRemovedHandler = null;
+    this.onConnectionStateChangeHandler = null;
+
+    // Clear buffer
+    console.log('🎵 WebRTCService: Clearing message buffer...');
+    this.messageBuffer = [];
+
+    // Reset state
+    this.roomKey = null;
+    this.userId = null;
     this.isInitialized = false;
-    console.log('WebRTCService: Disconnected');
+
+    console.log('🎵 WebRTCService: Complete disconnect finished');
   }
 
   // Check if initialized
   isReady(): boolean {
     return this.isInitialized && this.localStream !== null;
+  }
+
+  // Get current state for debugging
+  getState(): any {
+    return {
+      isInitialized: this.isInitialized,
+      roomKey: this.roomKey,
+      userId: this.userId,
+      localStreamActive: this.localStream?.active,
+      localStreamTracks: this.localStream?.getTracks().length || 0,
+      peerConnectionsCount: this.peerConnections.size,
+      remoteStreamsCount: this.remoteStreams.size,
+      bufferedMessagesCount: this.messageBuffer.length,
+      hasHandlers: {
+        onRemoteStream: !!this.onRemoteStreamHandler,
+        onRemoteStreamRemoved: !!this.onRemoteStreamRemovedHandler,
+        onConnectionStateChange: !!this.onConnectionStateChangeHandler
+      }
+    };
   }
 }
 

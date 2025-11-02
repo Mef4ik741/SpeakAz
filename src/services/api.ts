@@ -70,14 +70,32 @@ export const roomAPI = {
 
   leaveRoom: async (roomKey: string) => {
     try {
+      console.log('API - Attempting to leave room:', roomKey)
       const response = await api.post(`/api/room/leave/${roomKey}`)
+      console.log('API - Successfully left room:', response.data)
       return response.data
     } catch (error: any) {
-      // Если комната не найдена, это не критичная ошибка
-      if (error.response?.status === 400 && error.response?.data?.message?.includes('не найдена')) {
-        console.warn('API - Room not found when leaving, this is normal:', error.response.data.message)
-        return { isSuccess: true, message: 'Комната уже недоступна' }
+      console.log('API - Leave room error details:', {
+        status: error.response?.status,
+        message: error.response?.data?.message,
+        data: error.response?.data,
+        roomKey: roomKey
+      })
+      
+      // Если комната не найдена или пользователь не участник, это не критичная ошибка
+      if (error.response?.status === 400) {
+        const errorMessage = error.response?.data?.message || ''
+        if (errorMessage.includes('не найдена') || 
+            errorMessage.includes('не являетесь участником') ||
+            errorMessage.includes('неактивна') ||
+            errorMessage.includes('not found') ||
+            errorMessage.includes('not a participant')) {
+          console.warn('API - Room leave error (non-critical):', errorMessage)
+          return { isSuccess: true, message: 'Выход из комнаты выполнен (комната недоступна или вы уже не участник)' }
+        }
       }
+      
+      console.error('API - Critical leave room error:', error.response?.data || error.message)
       throw error
     }
   },
