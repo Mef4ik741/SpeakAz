@@ -10,6 +10,7 @@ interface CreateRoomProps {
 const CreateRoom: React.FC<CreateRoomProps> = ({ onRoomCreated }) => {
   const [name, setName] = useState('')
   const [maxParticipants, setMaxParticipants] = useState(5)
+  const [audioBitrate, setAudioBitrate] = useState(64)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [createdRoom, setCreatedRoom] = useState<any>(null)
@@ -22,7 +23,8 @@ const CreateRoom: React.FC<CreateRoomProps> = ({ onRoomCreated }) => {
     try {
       const response = await roomAPI.createRoom({
         name,
-        maxParticipants
+        maxParticipants,
+        audioBitrate
       })
 
       if (response.isSuccess && response.data) {
@@ -30,6 +32,7 @@ const CreateRoom: React.FC<CreateRoomProps> = ({ onRoomCreated }) => {
         setCreatedRoom(response.data)
         setName('')
         setMaxParticipants(5)
+        setAudioBitrate(64)
       } else {
         throw new Error(response.message || 'Ошибка создания комнаты')
       }
@@ -57,6 +60,7 @@ const CreateRoom: React.FC<CreateRoomProps> = ({ onRoomCreated }) => {
       ownerUsername: '', // Будет заполнено при загрузке
       currentParticipants: 1,
       maxParticipants: createdRoom.maxParticipants || 5,
+      audioBitrate: createdRoom.audioBitrate || audioBitrate,
       createdAt: createdRoom.createdAt || new Date().toISOString(),
       lastActivity: new Date().toISOString(),
       isActive: true,
@@ -107,6 +111,33 @@ const CreateRoom: React.FC<CreateRoomProps> = ({ onRoomCreated }) => {
               <option value={4}>4 участника</option>
               <option value={5}>5 участников</option>
             </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="audioBitrate">Битрейт аудио</label>
+            <div className="bitrate-container">
+              <input
+                id="audioBitrate"
+                type="range"
+                min="8"
+                max="320"
+                step="8"
+                value={audioBitrate}
+                onChange={(e) => setAudioBitrate(Number(e.target.value))}
+                className="bitrate-slider"
+              />
+              <div className="bitrate-display">
+                <span>{audioBitrate}kbps</span>
+              </div>
+            </div>
+            <div className="bitrate-presets">
+              <button type="button" onClick={() => setAudioBitrate(64)} className={audioBitrate === 64 ? 'active' : ''}>64kbps</button>
+              <button type="button" onClick={() => setAudioBitrate(128)} className={audioBitrate === 128 ? 'active' : ''}>128kbps</button>
+              <button type="button" onClick={() => setAudioBitrate(192)} className={audioBitrate === 192 ? 'active' : ''}>192kbps</button>
+            </div>
+            <p className="bitrate-warning">
+              Рекомендуется 64 kbps для стабильного соединения
+            </p>
           </div>
 
           {error && <div className="error-message">{error}</div>}

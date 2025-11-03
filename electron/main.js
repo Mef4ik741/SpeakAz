@@ -11,9 +11,68 @@ const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 let mainWindow
 let tray
 let isQuitting = false
+let memoryMonitorTimer = null
 
 // Настройка безопасности
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
+
+// Функция мониторинга памяти
+function startMemoryMonitoring() {
+  memoryMonitorTimer = setInterval(() => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const memoryInfo = process.getProcessMemoryInfo()
+      const systemMemory = process.getSystemMemoryInfo()
+      
+      console.log('🧠 Memory Usage:', {
+        rss: Math.round(memoryInfo.residentSet / 1024 / 1024) + 'MB',
+        heapUsed: Math.round(memoryInfo.private / 1024 / 1024) + 'MB',
+        external: Math.round(memoryInfo.sharedWorkingSet / 1024 / 1024) + 'MB',
+        systemFree: Math.round(systemMemory.free / 1024 / 1024) + 'MB'
+      })
+      
+      // Если память превышает 500MB, принудительно очищаем
+      if (memoryInfo.residentSet > 500 * 1024 * 1024) {
+        console.warn('🧠 High memory usage detected, performing cleanup...')
+        performMemoryCleanup()
+      }
+    }
+  }, 30000) // Каждые 30 секунд
+}
+
+function performMemoryCleanup() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    // Очищаем кэш сессии
+    mainWindow.webContents.session.clearCache()
+    
+    // Принудительный сбор мусора в renderer процессе
+    mainWindow.webContents.executeJavaScript(`
+      // Очищаем WebRTC и WebSocket буферы
+      if (window.webRTCService) {
+        console.log('🧹 Electron: Triggering WebRTC cleanup...')
+        window.webRTCService.performMemoryCleanup?.()
+      }
+      
+      if (window.roomWebSocketService) {
+        console.log('🧹 Electron: Triggering WebSocket cleanup...')
+        window.roomWebSocketService.performBufferCleanup?.()
+      }
+      
+      // Принудительный сбор мусора если доступен
+      if (window.gc) {
+        window.gc()
+      }
+      
+      console.log('🧹 Electron: Memory cleanup completed')
+    `).catch(err => {
+      console.error('Error during memory cleanup:', err)
+    })
+    
+    // Принудительный сбор мусора в main процессе
+    if (global.gc) {
+      global.gc()
+    }
+  }
+}
 
 // HTTP сервер для статических файлов
 let localServer = null
@@ -119,7 +178,7 @@ function setupFileProtocol() {
 }
 
 function createWindow() {
-  // Создаем главное окно приложения
+  // Создаем главное окно приложения с оптимизацией памяти
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -133,13 +192,33 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       webSecurity: false, // Временно отключаем для диагностики
       allowRunningInsecureContent: true,
-      experimentalFeatures: true
+      experimentalFeatures: true,
+      // Оптимизация памяти
+      backgroundThrottling: false, // Отключаем троттлинг для аудио
+      offscreen: false,
+      spellcheck: false, // Отключаем проверку орфографии
+      // Ограничиваем использование памяти
+      partition: 'persist:main',
+      // Включаем аппаратное ускорение только если нужно
+      hardwareAcceleration: true
     },
     titleBarStyle: 'default',
     show: false, // Не показываем окно сразу
     autoHideMenuBar: false, // Показываем меню
   })
 
+  // Настройки сессии для оптимизации памяти
+  const session = mainWindow.webContents.session
+  
+  // Очистка кэша при старте
+  session.clearCache()
+  
+  // Устанавливаем User-Agent через webContents (работает в Electron)
+  mainWindow.webContents.setUserAgent('SpeakAz-Electron/1.0.0')
+  
+  // Ограничиваем размер кэша (в байтах)
+  session.setCacheSize(50 * 1024 * 1024) // 50MB
+  
   // Загружаем приложение через HTTP сервер
   createLocalServer().then((serverUrl) => {
     console.log('🚀 Loading URL:', serverUrl)
@@ -176,6 +255,18 @@ function createWindow() {
     } else {
       callback({})
     }
+  })
+
+  // Добавляем заголовки для ngrok запросов
+  mainWindow.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
+    // Добавляем заголовки для обхода ngrok предупреждения
+    if (details.url.includes('ngrok-free.dev') || details.url.includes('ngrok.io')) {
+      console.log('🔧 Adding ngrok headers for:', details.url)
+      details.requestHeaders['ngrok-skip-browser-warning'] = 'true'
+      // User-Agent нельзя устанавливать через JavaScript - браузер блокирует
+    }
+    
+    callback({ requestHeaders: details.requestHeaders })
   })
 
   // Обработка ошибок загрузки ресурсов
@@ -451,6 +542,9 @@ app.whenReady().then(() => {
   createWindow()
   createTray()
   createMenu()
+  
+  // Запускаем мониторинг памяти
+  startMemoryMonitoring()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -470,6 +564,13 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isQuitting = true
+  
+  // Останавливаем мониторинг памяти
+  if (memoryMonitorTimer) {
+    console.log('🧠 Stopping memory monitoring...')
+    clearInterval(memoryMonitorTimer)
+    memoryMonitorTimer = null
+  }
   
   // Закрываем HTTP сервер
   if (localServer) {

@@ -107,6 +107,7 @@ const RoomPage: React.FC = () => {
             ownerUsername: 'Неизвестно',
             currentParticipants: 0,
             maxParticipants: 5,
+            audioBitrate: 64,
             createdAt: new Date().toISOString(),
             lastActivity: new Date().toISOString(),
             isActive: true,

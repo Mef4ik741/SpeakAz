@@ -5,6 +5,7 @@ export interface Room {
   ownerUsername: string
   currentParticipants: number
   maxParticipants: number
+  audioBitrate: number
   createdAt: string
   lastActivity: string
   isActive: boolean
@@ -23,6 +24,7 @@ export interface RoomParticipant {
 export interface CreateRoomRequest {
   name: string
   maxParticipants: number
+  audioBitrate: number
 }
 
 export interface JoinRoomRequest {

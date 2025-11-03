@@ -7,8 +7,11 @@ const api = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
-    'ngrok-skip-browser-warning': 'true'  // Пропускаем предупреждение ngrok
+    'ngrok-skip-browser-warning': 'true',  // Пропускаем предупреждение ngrok
+    'Accept': 'application/json',
+    'Cache-Control': 'no-cache'
   },
+  timeout: 10000  // 10 секунд таймаут
 })
 
 // Добавляем токен к каждому запросу
@@ -28,7 +31,9 @@ api.interceptors.response.use(
       message: error.message,
       status: error.response?.status,
       data: error.response?.data,
-      url: error.config?.url
+      url: error.config?.url,
+      headers: error.response?.headers,
+      responseText: typeof error.response?.data === 'string' ? error.response.data.substring(0, 200) : 'Not string'
     })
     
     if (error.response?.status === 401) {
@@ -43,8 +48,18 @@ api.interceptors.response.use(
 
 export const authAPI = {
   login: async (username: string, password: string) => {
-    const response = await api.post('/api/auth/LoginByUsername', { username, password })
-    return response.data
+    try {
+      const response = await api.post('/api/auth/LoginByUsername', { username, password })
+      return response.data
+    } catch (error: any) {
+      // Специальная обработка для ngrok HTML ответов
+      if (error.message?.includes('Unexpected token') && error.message?.includes('<!DOCTYPE')) {
+        console.error('🚨 Electron ngrok issue: Received HTML instead of JSON')
+        console.error('This usually means ngrok warning page is being shown')
+        throw new Error('Проблема с подключением к серверу. Попробуйте перезапустить приложение.')
+      }
+      throw error
+    }
   },
 
   register: async (username: string, password: string, confirmPassword: string) => {
@@ -137,6 +152,11 @@ export const roomAPI = {
 
   heartbeat: async (roomKey: string) => {
     const response = await api.post(`/api/room/${roomKey}/heartbeat`)
+    return response.data
+  },
+
+  updateAudioBitrate: async (roomKey: string, audioBitrate: number) => {
+    const response = await api.post(`/api/room/${roomKey}/bitrate`, { audioBitrate })
     return response.data
   }
 }

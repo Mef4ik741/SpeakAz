@@ -24,9 +24,10 @@ interface RoomViewProps {
   onLeave: () => void
 }
 
-const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
+const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
   const { user } = useAuth()
   const { roomKey: urlRoomKey } = useParams<{ roomKey: string }>()
+  const [room, setRoom] = useState<Room>(initialRoom)
   const [participants, setParticipants] = useState<RoomParticipant[]>(room.participants || [])
   const [isMuted, setIsMuted] = useState(false)
   const [isDeafened, setIsDeafened] = useState(false)
@@ -39,9 +40,50 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
   const isInitializedRef = useRef(false)
   const heartbeatRef = useRef<NodeJS.Timeout>()
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map())
+  const audioCleanupTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const currentUser = participants.find(p => p.userId === user?.id)
   const isOwner = currentUser?.isOwner || false
+
+  // Функция для периодической очистки audio элементов
+  const startAudioCleanup = () => {
+    if (audioCleanupTimerRef.current) {
+      clearInterval(audioCleanupTimerRef.current);
+    }
+    
+    audioCleanupTimerRef.current = setInterval(() => {
+      console.log('🧹 RoomView: Performing audio elements cleanup...');
+      
+      const deadElements: string[] = [];
+      audioElementsRef.current.forEach((audioElement, userId) => {
+        // Проверяем, есть ли соответствующий участник
+        const participant = participants.find(p => p.userId === userId);
+        
+        if (!participant || audioElement.ended || audioElement.error) {
+          console.log('🧹 RoomView: Found dead audio element for user:', userId);
+          deadElements.push(userId);
+        }
+      });
+      
+      // Удаляем мертвые элементы
+      deadElements.forEach(userId => {
+        const audioElement = audioElementsRef.current.get(userId);
+        if (audioElement) {
+          console.log('🧹 RoomView: Cleaning up audio element for user:', userId);
+          audioElement.pause();
+          audioElement.srcObject = null;
+          if (document.body.contains(audioElement)) {
+            document.body.removeChild(audioElement);
+          }
+          audioElementsRef.current.delete(userId);
+        }
+      });
+      
+      if (deadElements.length > 0) {
+        console.log('🧹 RoomView: Cleaned up', deadElements.length, 'audio elements');
+      }
+    }, 60000); // Каждую минуту
+  };
 
   useEffect(() => {
     if (isInitializedRef.current) {
@@ -93,6 +135,9 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
           setWebRTCInitialized(true);
           console.log('🔧 RoomView: WebRTC initialized successfully');
           console.log('🔧 RoomView: WebRTC state after initialization:', webRTCService.getState());
+          
+          // Запускаем периодическую очистку audio элементов
+          startAudioCleanup();
 
           // Setup WebRTC event handlers
           webRTCService.onRemoteStream((userId: string, stream: MediaStream) => {
@@ -374,12 +419,33 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
       setError(errorMessage);
     };
 
+    const handleAudioBitrateChanged = (message: any) => {
+      console.log('🎵 RoomView: Audio bitrate changed event received:', message);
+      
+      const { audioBitrate, changedBy } = message;
+      
+      if (audioBitrate && typeof audioBitrate === 'number') {
+        // Обновляем локальное состояние комнаты
+        setRoom(prev => ({ ...prev, audioBitrate }));
+        
+        console.log('🎵 RoomView: Audio bitrate updated to:', audioBitrate, 'by user:', changedBy);
+        
+        // Показываем уведомление если изменение сделал не текущий пользователь
+        const currentUserId = getUserIdFromToken();
+        if (changedBy && changedBy !== currentUserId) {
+          // Можно добавить toast уведомление
+          console.log('🎵 RoomView: Bitrate changed by another user');
+        }
+      }
+    };
+
     // Регистрируем обработчики
     roomWebSocketService.on('participant_joined', handleParticipantJoined);
     roomWebSocketService.on('participant_left', handleParticipantLeft);
     roomWebSocketService.on('room_joined', handleRoomJoined);
     roomWebSocketService.on('heartbeat_ack', handleHeartbeatAck);
     roomWebSocketService.on('join_room_error', handleJoinRoomError);
+    roomWebSocketService.on('audio_bitrate_changed', handleAudioBitrateChanged);
 
     // Heartbeat каждые 30 секунд через WebSocket
     const startHeartbeat = () => {
@@ -412,6 +478,7 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
       roomWebSocketService.off('room_joined', handleRoomJoined);
       roomWebSocketService.off('heartbeat_ack', handleHeartbeatAck);
       roomWebSocketService.off('join_room_error', handleJoinRoomError);
+      roomWebSocketService.off('audio_bitrate_changed', handleAudioBitrateChanged);
       
       // Покидаем комнату
       const actualRoomKey = room.roomKey;
@@ -454,6 +521,13 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
         
         console.log('🔧 RoomView: WebRTC cleanup completed');
         console.log('🔧 RoomView: WebRTC state after cleanup:', webRTCService.getState());
+      }
+
+      // Останавливаем таймер очистки audio элементов
+      if (audioCleanupTimerRef.current) {
+        console.log('🧹 RoomView: Stopping audio cleanup timer...');
+        clearInterval(audioCleanupTimerRef.current);
+        audioCleanupTimerRef.current = null;
       }
 
       // Убираем обработчик beforeunload
@@ -564,6 +638,31 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
     }
   }
 
+  const handleBitrateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newBitrate = parseInt(e.target.value);
+    setBitrate(newBitrate);
+  };
+
+  const setBitrate = async (bitrate: number) => {
+    if (!isOwner) {
+      console.warn('Only room owner can change bitrate');
+      return;
+    }
+
+    try {
+      console.log('🎵 RoomView: Updating audio bitrate to:', bitrate);
+      await roomAPI.updateAudioBitrate(room.roomKey, bitrate);
+      
+      // Обновляем локальное состояние комнаты
+      setRoom(prev => ({ ...prev, audioBitrate: bitrate }));
+      
+      console.log('🎵 RoomView: Audio bitrate updated successfully');
+    } catch (error) {
+      console.error('🎵 RoomView: Failed to update audio bitrate:', error);
+      setError('Не удалось обновить битрейт аудио');
+    }
+  };
+
   return (
     <div className="room-view">
       <div className="room-header">
@@ -609,6 +708,36 @@ const RoomView: React.FC<RoomViewProps> = ({ room, onLeave }) => {
             <span>Создана:</span>
             <span>{new Date(room.createdAt).toLocaleString()}</span>
           </div>
+          
+          {isOwner && (
+            <div className="setting-item bitrate-setting">
+              <div className="bitrate-header">
+                <span>Битрейт аудио:</span>
+                <span className="bitrate-value">{room.audioBitrate}kbps</span>
+              </div>
+              <div className="bitrate-slider-container">
+                <span className="bitrate-label">8kbps</span>
+                <input
+                  type="range"
+                  min="8"
+                  max="320"
+                  step="8"
+                  value={room.audioBitrate}
+                  onChange={handleBitrateChange}
+                  className="bitrate-slider"
+                />
+                <span className="bitrate-label">320kbps</span>
+              </div>
+              <div className="bitrate-presets">
+                <button onClick={() => setBitrate(64)} className={room.audioBitrate === 64 ? 'active' : ''}>64kbps</button>
+                <button onClick={() => setBitrate(128)} className={room.audioBitrate === 128 ? 'active' : ''}>128kbps</button>
+                <button onClick={() => setBitrate(192)} className={room.audioBitrate === 192 ? 'active' : ''}>192kbps</button>
+              </div>
+              <p className="bitrate-warning">
+                ВНИМАНИЕ! Не поднимайте битрейт выше 64 kbps, чтобы не создать проблемы людям с низкой скоростью соединения.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

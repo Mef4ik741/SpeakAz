@@ -1,3 +1,8 @@
+// Константы для управления памятью
+const MAX_MESSAGE_BUFFER_SIZE = 100
+const MAX_PEER_CONNECTIONS = 20
+const MEMORY_CLEANUP_INTERVAL = 30000 // 30 секунд
+
 class WebRTCService {
   private localStream: MediaStream | null = null;
   private peerConnections: Map<string, RTCPeerConnection> = new Map();
@@ -22,9 +27,11 @@ class WebRTCService {
   
   // Буфер для WebRTC сообщений, полученных до инициализации
   private messageBuffer: any[] = [];
+  private memoryCleanupTimer: NodeJS.Timeout | null = null;
 
   constructor() {
     console.log('WebRTCService: Initialized');
+    this.startMemoryCleanup();
   }
 
   // Initialize WebRTC with room and user info
@@ -582,6 +589,13 @@ class WebRTCService {
     console.log('🎵 WebRTCService: Clearing message buffer...');
     this.messageBuffer = [];
 
+    // Stop memory cleanup timer
+    if (this.memoryCleanupTimer) {
+      console.log('🎵 WebRTCService: Stopping memory cleanup timer...');
+      clearInterval(this.memoryCleanupTimer);
+      this.memoryCleanupTimer = null;
+    }
+
     // Reset state
     this.roomKey = null;
     this.userId = null;
@@ -611,6 +625,82 @@ class WebRTCService {
         onRemoteStreamRemoved: !!this.onRemoteStreamRemovedHandler,
         onConnectionStateChange: !!this.onConnectionStateChangeHandler
       }
+    };
+  }
+
+  // Управление памятью
+  private startMemoryCleanup(): void {
+    if (this.memoryCleanupTimer) {
+      clearInterval(this.memoryCleanupTimer);
+    }
+    
+    this.memoryCleanupTimer = setInterval(() => {
+      this.performMemoryCleanup();
+    }, MEMORY_CLEANUP_INTERVAL);
+  }
+
+  private performMemoryCleanup(): void {
+    console.log('🧹 WebRTCService: Performing memory cleanup...');
+    
+    // Очищаем буфер сообщений если он слишком большой
+    if (this.messageBuffer.length > MAX_MESSAGE_BUFFER_SIZE) {
+      console.log('🧹 WebRTCService: Trimming message buffer from', this.messageBuffer.length, 'to', MAX_MESSAGE_BUFFER_SIZE);
+      this.messageBuffer = this.messageBuffer.slice(-MAX_MESSAGE_BUFFER_SIZE);
+    }
+
+    // Проверяем количество peer connections
+    if (this.peerConnections.size > MAX_PEER_CONNECTIONS) {
+      console.warn('🧹 WebRTCService: Too many peer connections:', this.peerConnections.size);
+      // Можно добавить логику для закрытия старых соединений
+    }
+
+    // Проверяем мертвые соединения
+    this.cleanupDeadConnections();
+    
+    // Принудительный сбор мусора (если доступен)
+    if (typeof window !== 'undefined' && (window as any).gc) {
+      (window as any).gc();
+    }
+  }
+
+  private cleanupDeadConnections(): void {
+    const deadConnections: string[] = [];
+    
+    this.peerConnections.forEach((pc, userId) => {
+      if (pc.connectionState === 'closed' || pc.connectionState === 'failed') {
+        console.log('🧹 WebRTCService: Found dead connection for user:', userId, 'state:', pc.connectionState);
+        deadConnections.push(userId);
+      }
+    });
+
+    deadConnections.forEach(userId => {
+      this.removePeerConnection(userId);
+    });
+
+    if (deadConnections.length > 0) {
+      console.log('🧹 WebRTCService: Cleaned up', deadConnections.length, 'dead connections');
+    }
+  }
+
+  // Добавляем сообщение в буфер с ограничением размера
+  private addToMessageBuffer(message: any): void {
+    this.messageBuffer.push(message);
+    
+    // Ограничиваем размер буфера
+    if (this.messageBuffer.length > MAX_MESSAGE_BUFFER_SIZE) {
+      this.messageBuffer = this.messageBuffer.slice(-MAX_MESSAGE_BUFFER_SIZE);
+    }
+  }
+
+  // Получить статистику использования памяти
+  getMemoryStats(): any {
+    return {
+      messageBufferSize: this.messageBuffer.length,
+      maxMessageBufferSize: MAX_MESSAGE_BUFFER_SIZE,
+      peerConnectionsCount: this.peerConnections.size,
+      maxPeerConnections: MAX_PEER_CONNECTIONS,
+      remoteStreamsCount: this.remoteStreams.size,
+      memoryCleanupActive: !!this.memoryCleanupTimer
     };
   }
 }

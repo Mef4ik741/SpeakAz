@@ -1,3 +1,8 @@
+// Константы для управления памятью WebSocket
+const MAX_WEBRTC_BUFFER_SIZE = 50
+const MAX_EVENT_HANDLERS_PER_TYPE = 10
+const BUFFER_CLEANUP_INTERVAL = 60000 // 1 минута
+
 class RoomWebSocketService {
   private ws: WebSocket | null = null;
   private reconnectAttempts = 0;
@@ -8,6 +13,7 @@ class RoomWebSocketService {
   
   // Буфер для WebRTC сообщений, полученных до регистрации обработчиков
   private webrtcMessageBuffer: any[] = [];
+  private bufferCleanupTimer: NodeJS.Timeout | null = null;
 
   constructor() {
     this.connect();
@@ -91,10 +97,9 @@ class RoomWebSocketService {
       console.log('🎵 RoomWebSocket: Found', handlers.length, 'handlers for event:', message.type);
     }
     
-    // Буферизация WebRTC сообщений если нет обработчиков
     if (handlers.length === 0 && message.type?.startsWith('webrtc_')) {
       console.log('🎵 RoomWebSocket: Buffering WebRTC message (normal behavior):', message.type);
-      this.webrtcMessageBuffer.push(message);
+      this.addToWebRTCBuffer(message);
       console.log('🎵 RoomWebSocket: Buffered messages count:', this.webrtcMessageBuffer.length);
       return;
     }
@@ -246,6 +251,75 @@ class RoomWebSocketService {
     }
     this.currentRoom = null;
     this.joinRequestSent = false; // Сбрасываем флаг при отключении
+  }
+
+  // Управление памятью для WebRTC буфера
+  private addToWebRTCBuffer(message: any): void {
+    this.webrtcMessageBuffer.push(message);
+    
+    // Ограничиваем размер буфера
+    if (this.webrtcMessageBuffer.length > MAX_WEBRTC_BUFFER_SIZE) {
+      console.log('🧹 RoomWebSocket: Trimming WebRTC buffer from', this.webrtcMessageBuffer.length, 'to', MAX_WEBRTC_BUFFER_SIZE);
+      this.webrtcMessageBuffer = this.webrtcMessageBuffer.slice(-MAX_WEBRTC_BUFFER_SIZE);
+    }
+  }
+
+  // Очистка старых буферизованных сообщений
+  private startBufferCleanup(): void {
+    if (this.bufferCleanupTimer) {
+      clearInterval(this.bufferCleanupTimer);
+    }
+    
+    this.bufferCleanupTimer = setInterval(() => {
+      this.performBufferCleanup();
+    }, BUFFER_CLEANUP_INTERVAL);
+  }
+
+  private performBufferCleanup(): void {
+    console.log('🧹 RoomWebSocket: Performing buffer cleanup...');
+    
+    // Очищаем старые WebRTC сообщения (старше 5 минут)
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+    const initialLength = this.webrtcMessageBuffer.length;
+    
+    this.webrtcMessageBuffer = this.webrtcMessageBuffer.filter(msg => {
+      return !msg.timestamp || msg.timestamp > fiveMinutesAgo;
+    });
+
+    if (this.webrtcMessageBuffer.length !== initialLength) {
+      console.log('🧹 RoomWebSocket: Cleaned up', initialLength - this.webrtcMessageBuffer.length, 'old messages');
+    }
+
+    // Проверяем количество обработчиков событий
+    let totalHandlers = 0;
+    this.eventHandlers.forEach((handlers, eventType) => {
+      totalHandlers += handlers.length;
+      if (handlers.length > MAX_EVENT_HANDLERS_PER_TYPE) {
+        console.warn('🧹 RoomWebSocket: Too many handlers for event:', eventType, handlers.length);
+      }
+    });
+
+    console.log('🧹 RoomWebSocket: Total event handlers:', totalHandlers);
+  }
+
+  // Получить статистику использования памяти
+  getMemoryStats(): any {
+    let totalHandlers = 0;
+    const handlersByType: { [key: string]: number } = {};
+    
+    this.eventHandlers.forEach((handlers, eventType) => {
+      totalHandlers += handlers.length;
+      handlersByType[eventType] = handlers.length;
+    });
+
+    return {
+      webrtcBufferSize: this.webrtcMessageBuffer.length,
+      maxWebrtcBufferSize: MAX_WEBRTC_BUFFER_SIZE,
+      totalEventHandlers: totalHandlers,
+      handlersByType,
+      bufferCleanupActive: !!this.bufferCleanupTimer,
+      isConnected: this.ws?.readyState === WebSocket.OPEN
+    };
   }
 }
 

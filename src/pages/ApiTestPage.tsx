@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { checkApiHealth } from '../utils/apiHealth'
 import { roomAPI } from '../services/api'
+
+const MAX_TEST_RESULTS = 50 // Ограничиваем количество результатов
 
 const ApiTestPage: React.FC = () => {
   const [apiStatus, setApiStatus] = useState<any>(null)
@@ -8,9 +10,15 @@ const ApiTestPage: React.FC = () => {
   const [testResults, setTestResults] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
 
-  const addTestResult = (message: string) => {
-    setTestResults(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`])
-  }
+  const addTestResult = useCallback((message: string) => {
+    setTestResults(prev => {
+      const newResults = [...prev, `${new Date().toLocaleTimeString()}: ${message}`]
+      // Ограничиваем размер массива для экономии памяти
+      return newResults.length > MAX_TEST_RESULTS 
+        ? newResults.slice(-MAX_TEST_RESULTS) 
+        : newResults
+    })
+  }, [])
 
   const runApiTests = async () => {
     setLoading(true)
@@ -55,7 +63,8 @@ const ApiTestPage: React.FC = () => {
       try {
         const createResponse = await roomAPI.createRoom({
           name: `Test Room ${Date.now()}`,
-          maxParticipants: 3
+          maxParticipants: 3,
+          audioBitrate: 64
         })
         addTestResult(`🏗️ Room creation: ✅ Success (${createResponse.data?.roomKey})`)
         
