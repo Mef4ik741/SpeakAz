@@ -1,5 +1,408 @@
 /* App.css - Основные стили для SpeakAz */
 
+/* P2P Server Page Styles */
+.server-page {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.server-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.server-header {
+  text-align: center;
+  padding: 2rem 0;
+}
+
+.server-header h1 {
+  font-size: 2.5rem;
+  margin: 1rem 0 0.5rem;
+  color: #fff;
+}
+
+.server-subtitle {
+  font-size: 1.1rem;
+  color: #b0b0b0;
+  margin: 0;
+}
+
+.server-icon {
+  color: #1976d2;
+}
+
+.error-message {
+  background: #d32f2f;
+  color: white;
+  padding: 1rem;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.error-message button {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0.25rem;
+}
+
+.server-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.stat-card {
+  background: #2d2d2d;
+  border: 2px solid #404040;
+  border-radius: 12px;
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.stat-card svg {
+  color: #1976d2;
+}
+
+.stat-card h3 {
+  font-size: 2rem;
+  color: #fff;
+  margin: 0;
+}
+
+.stat-card p {
+  color: #b0b0b0;
+  margin: 0;
+}
+
+.server-actions {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+
+.create-room-btn {
+  background: #1976d2;
+  color: white;
+  border: none;
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.create-room-btn:hover:not(:disabled) {
+  background: #1565c0;
+  transform: translateY(-2px);
+}
+
+.create-room-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.create-form-container {
+  background: #2d2d2d;
+  border: 2px solid #404040;
+  border-radius: 12px;
+  padding: 2rem;
+  margin-bottom: 2rem;
+}
+
+.create-p2p-form h3 {
+  color: #fff;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  color: #e0e0e0;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 0.75rem;
+  background: #1a1a1a;
+  border: 2px solid #404040;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 1rem;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #1976d2;
+}
+
+.form-group input[type="checkbox"] {
+  width: auto;
+  margin-right: 0.5rem;
+}
+
+.create-p2p-form button[type="submit"] {
+  width: 100%;
+  background: #1976d2;
+  color: white;
+  border: none;
+  padding: 1rem;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.create-p2p-form button[type="submit"]:hover:not(:disabled) {
+  background: #1565c0;
+}
+
+.create-p2p-form button[type="submit"]:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.p2p-rooms-section h2 {
+  color: #fff;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 3rem;
+  color: #b0b0b0;
+}
+
+.empty-state svg {
+  color: #404040;
+  margin-bottom: 1rem;
+}
+
+.empty-state h3 {
+  color: #e0e0e0;
+  margin-bottom: 0.5rem;
+}
+
+.rooms-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 1.5rem;
+}
+
+.p2p-room-card {
+  background: #2d2d2d;
+  border: 2px solid #404040;
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.2s;
+}
+
+.p2p-room-card:hover {
+  border-color: #1976d2;
+  transform: translateY(-2px);
+}
+
+.room-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.room-header h3 {
+  color: #fff;
+  margin: 0;
+}
+
+.server-status {
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.server-status.running {
+  background: rgba(76, 175, 80, 0.2);
+  color: #4caf50;
+}
+
+.server-status.stopped {
+  background: rgba(244, 67, 54, 0.2);
+  color: #f44336;
+}
+
+.room-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #b0b0b0;
+  font-size: 0.9rem;
+}
+
+.info-item svg {
+  color: #1976d2;
+}
+
+.room-description {
+  color: #b0b0b0;
+  font-style: italic;
+  margin-bottom: 1rem;
+}
+
+.room-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.start-btn {
+  background: #4caf50;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.start-btn:hover:not(:disabled) {
+  background: #45a049;
+}
+
+.stop-btn {
+  background: #f44336;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.stop-btn:hover:not(:disabled) {
+  background: #da190b;
+}
+
+.delete-btn {
+  background: #ff9800;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.delete-btn:hover:not(:disabled) {
+  background: #f57c00;
+}
+
+.participants-list {
+  border-top: 1px solid #404040;
+  padding-top: 1rem;
+}
+
+.participants-list h4 {
+  color: #e0e0e0;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.participant-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 0.85rem;
+  color: #b0b0b0;
+}
+
+.participant-quality {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: #888;
+}
+
+.server-benefits {
+  margin-top: 3rem;
+}
+
+.server-benefits h2 {
+  color: #fff;
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.benefits-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.benefit-card {
+  background: #2d2d2d;
+  border: 2px solid #404040;
+  border-radius: 12px;
+  padding: 2rem;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.benefit-card:hover {
+  border-color: #1976d2;
+  transform: translateY(-2px);
+}
+
+.benefit-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.benefit-card h3 {
+  color: #fff;
+  margin-bottom: 1rem;
+}
+
+.benefit-card p {
+  color: #b0b0b0;
+  line-height: 1.5;
+}
+
 * {
   margin: 0;
   padding: 0;

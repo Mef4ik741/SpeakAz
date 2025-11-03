@@ -161,4 +161,87 @@ export const roomAPI = {
   }
 }
 
+// P2P API для управления P2P комнатами и серверами
+export const p2pAPI = {
+  // Управление P2P комнатами
+  createP2PRoom: async (data: {
+    name: string
+    serverPort: number
+    maxParticipants?: number
+    requirePassword?: boolean
+    password?: string
+    description?: string
+  }) => {
+    const response = await api.post('/api/p2p/rooms/create', data)
+    return response.data
+  },
+
+  joinP2PRoom: async (data: { roomKey: string; password?: string }) => {
+    const response = await api.post('/api/p2p/rooms/join', data)
+    return response.data
+  },
+
+  leaveP2PRoom: async (roomKey: string) => {
+    const response = await api.post(`/api/p2p/rooms/leave/${roomKey}`)
+    return response.data
+  },
+
+  getP2PRoomInfo: async (roomKey: string) => {
+    const response = await api.get(`/api/p2p/rooms/${roomKey}`)
+    return response.data
+  },
+
+  getMyP2PRooms: async () => {
+    const response = await api.get('/api/p2p/rooms/my')
+    return response.data
+  },
+
+  deleteP2PRoom: async (roomKey: string) => {
+    const response = await api.delete(`/api/p2p/rooms/${roomKey}`)
+    return response.data
+  },
+
+  getPublicP2PRooms: async () => {
+    const response = await api.get('/api/p2p/rooms/public')
+    return response.data
+  },
+
+  // Управление локальными серверами
+  startP2PServer: async (roomKey: string, port: number) => {
+    const response = await api.post(`/api/p2p/server/start/${roomKey}`, port)
+    return response.data
+  },
+
+  stopP2PServer: async (roomKey: string) => {
+    const response = await api.post(`/api/p2p/server/stop/${roomKey}`)
+    return response.data
+  },
+
+  getP2PServerStatus: async (roomKey: string) => {
+    const response = await api.get(`/api/p2p/server/status/${roomKey}`)
+    return response.data
+  },
+
+  getActiveP2PServers: async () => {
+    const response = await api.get('/api/p2p/server/active')
+    return response.data
+  },
+
+  // Управление участниками P2P
+  muteP2PParticipant: async (roomKey: string, participantUserId: string) => {
+    const response = await api.post(`/api/p2p/rooms/${roomKey}/participants/${participantUserId}/mute`)
+    return response.data
+  },
+
+  kickP2PParticipant: async (roomKey: string, participantUserId: string) => {
+    const response = await api.post(`/api/p2p/rooms/${roomKey}/participants/${participantUserId}/kick`)
+    return response.data
+  },
+
+  updateP2PPing: async (roomKey: string, latency?: number) => {
+    const response = await api.post(`/api/p2p/rooms/${roomKey}/ping`, latency)
+    return response.data
+  }
+}
+
 export default api
