@@ -287,10 +287,15 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
         if (!exists) {
           console.log('🎵 RoomView: Adding new participant to state:', participantData);
           
+          // Получаем текущий userId из JWT токена (более надежно чем user?.id)
+          const currentUserId = getUserIdFromToken();
+          
           // Проигрываем звук входа (только если это не текущий пользователь)
-          if (userId !== user?.id) {
+          if (userId !== currentUserId) {
             console.log('🔊 Playing join sound for participant:', username);
             playJoinSound();
+          } else {
+            console.log('🔊 Not playing join sound - this is current user');
           }
           
           return [...prev, participantData];
@@ -307,19 +312,26 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
       console.log('🚪 RoomView: Participant left event received:', message);
       console.log('🚪 RoomView: Current participants before removal:', participants.map(p => ({ userId: p.userId, username: p.username })));
       
+      // Получаем текущий userId из JWT токена (более надежно чем user?.id)
+      const currentUserId = getUserIdFromToken();
+      console.log('🚪 RoomView: Current user ID from token:', currentUserId);
+      
       // Найдем участника перед удалением для получения имени
       const leavingParticipant = participants.find(p => p.userId === message.userId);
+      console.log('🚪 RoomView: Leaving participant found:', leavingParticipant);
       
       // Проигрываем звук выхода ПЕРЕД обновлением состояния (только если это не текущий пользователь)
-      if (message.userId !== user?.id && leavingParticipant) {
-        console.log('🔊 Playing leave sound for participant:', leavingParticipant.username);
+      if (message.userId !== currentUserId && (leavingParticipant || message.username)) {
+        const participantName = leavingParticipant?.username || message.username || 'Unknown';
+        console.log('🔊 Playing leave sound for participant:', participantName);
         playLeaveSound();
       } else {
         console.log('🔊 Not playing leave sound - either current user or participant not found:', {
-          isCurrentUser: message.userId === user?.id,
+          isCurrentUser: message.userId === currentUserId,
           participantFound: !!leavingParticipant,
+          hasUsername: !!message.username,
           userId: message.userId,
-          currentUserId: user?.id
+          currentUserId: currentUserId
         });
       }
       
