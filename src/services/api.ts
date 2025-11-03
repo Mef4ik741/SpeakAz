@@ -172,8 +172,30 @@ export const p2pAPI = {
     password?: string
     description?: string
   }) => {
-    const response = await api.post('/api/p2p/rooms/create', data)
-    return response.data
+    console.log('P2P API - Отправляем запрос на создание комнаты:', data)
+    
+    // Очищаем пароль если он не требуется
+    const cleanData = {
+      ...data,
+      password: data.requirePassword ? data.password : undefined
+    }
+    
+    console.log('P2P API - Очищенные данные:', cleanData)
+    
+    try {
+      const response = await api.post('/api/p2p/rooms/create', cleanData)
+      console.log('P2P API - Комната создана успешно:', response.data)
+      return response.data
+    } catch (error: any) {
+      console.error('P2P API - Ошибка создания комнаты:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        url: error.config?.url,
+        method: error.config?.method,
+        sentData: data
+      })
+      throw error
+    }
   },
 
   joinP2PRoom: async (data: { roomKey: string; password?: string }) => {

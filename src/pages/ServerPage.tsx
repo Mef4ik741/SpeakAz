@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { Server, Settings, Code, Database, Play, Square, Users, Wifi, Clock, Activity } from 'lucide-react'
+import React, { useState, useEffect, useRef } from 'react'
+import { Server, Settings, Code, Database, Play, Square, Users, Wifi, Clock, Activity, ChevronLeft, ChevronRight } from 'lucide-react'
 import { p2pAPI } from '../services/api'
 import { P2PRoom, CreateP2PRoomRequest, P2PServerStatus } from '../types/P2P'
 
@@ -9,6 +9,7 @@ const ServerPage: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const sliderRef = useRef<HTMLDivElement>(null)
   const [createForm, setCreateForm] = useState<CreateP2PRoomRequest>({
     name: '',
     serverPort: 8080,
@@ -44,7 +45,45 @@ const ServerPage: React.FC = () => {
     setLoading(true)
     setError(null)
 
+    // Валидация формы
+    if (!createForm.name.trim()) {
+      setError('Название комнаты обязательно')
+      setLoading(false)
+      return
+    }
+
+    if (createForm.name.length > 100) {
+      setError('Название не должно превышать 100 символов')
+      setLoading(false)
+      return
+    }
+
+    if (createForm.serverPort < 1024 || createForm.serverPort > 65535) {
+      setError('Порт должен быть от 1024 до 65535')
+      setLoading(false)
+      return
+    }
+
+    if (!createForm.maxParticipants || createForm.maxParticipants < 2 || createForm.maxParticipants > 50) {
+      setError('Количество участников должно быть от 2 до 50')
+      setLoading(false)
+      return
+    }
+
+    if (createForm.requirePassword && (!createForm.password || createForm.password.length < 4)) {
+      setError('Пароль должен содержать минимум 4 символа')
+      setLoading(false)
+      return
+    }
+
+    if (createForm.description && createForm.description.length > 500) {
+      setError('Описание не должно превышать 500 символов')
+      setLoading(false)
+      return
+    }
+
     try {
+      console.log('Отправляем данные для создания P2P комнаты:', createForm)
       const response = await p2pAPI.createP2PRoom(createForm)
       console.log('P2P комната создана:', response)
       
@@ -63,7 +102,23 @@ const ServerPage: React.FC = () => {
       await loadData()
     } catch (err: any) {
       console.error('Ошибка создания P2P комнаты:', err)
-      setError(err.response?.data?.message || 'Ошибка создания комнаты')
+      console.error('Детали ошибки:', {
+        status: err.response?.status,
+        data: err.response?.data,
+        message: err.message,
+        config: err.config
+      })
+      
+      let errorMessage = 'Ошибка создания комнаты'
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message
+      } else if (err.response?.data?.error) {
+        errorMessage = err.response.data.error
+      } else if (err.response?.data) {
+        errorMessage = JSON.stringify(err.response.data)
+      }
+      
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -109,23 +164,43 @@ const ServerPage: React.FC = () => {
 
   const isServerRunning = (roomKey: string) => activeServers.includes(roomKey)
 
+  const scrollSlider = (direction: 'left' | 'right') => {
+    if (sliderRef.current) {
+      const scrollAmount = 370 // ширина карточки + gap
+      const currentScroll = sliderRef.current.scrollLeft
+      const newScroll = direction === 'left' 
+        ? currentScroll - scrollAmount 
+        : currentScroll + scrollAmount
+      
+      sliderRef.current.scrollTo({
+        left: newScroll,
+        behavior: 'smooth'
+      })
+    }
+  }
+
   return (
     <div className="server-page">
-      <div className="server-container">
-        <div className="server-header">
-          <Server size={64} className="server-icon" />
-          <h1>P2P Сервер управление</h1>
-          <p className="server-subtitle">Создавайте и управляйте P2P комнатами</p>
-        </div>
-
-        {error && (
-          <div className="error-message">
-            <p>❌ {error}</p>
-            <button onClick={() => setError(null)}>✕</button>
+      <div className="server-header">
+        <div className="header-content">
+          <Server size={48} className="server-icon" />
+          <div className="header-text">
+            <h1>P2P Управление</h1>
+            <p className="server-subtitle">Создавайте и управляйте своими серверами</p>
           </div>
-        )}
+        </div>
+      </div>
 
-        <div className="server-stats">
+      {error && (
+        <div className="error-message">
+          <p>❌ {error}</p>
+          <button onClick={() => setError(null)}>✕</button>
+        </div>
+      )}
+
+      <div className="server-container">
+        <div className="server-left-panel">
+          <div className="server-stats">
           <div className="stat-card">
             <Database size={32} />
             <div>
@@ -147,17 +222,20 @@ const ServerPage: React.FC = () => {
               <p>Всего участников</p>
             </div>
           </div>
+          </div>
+
+          <div className="server-actions">
+            <button 
+              className="create-room-btn"
+              onClick={() => setShowCreateForm(!showCreateForm)}
+              disabled={loading}
+            >
+              {showCreateForm ? '❌ Отмена' : '➕ Создать P2P комнату'}
+            </button>
+          </div>
         </div>
 
-        <div className="server-actions">
-          <button 
-            className="create-room-btn"
-            onClick={() => setShowCreateForm(!showCreateForm)}
-            disabled={loading}
-          >
-            {showCreateForm ? '❌ Отмена' : '➕ Создать P2P комнату'}
-          </button>
-        </div>
+        <div className="server-right-panel">
 
         {showCreateForm && (
           <div className="create-form-container">
@@ -248,8 +326,9 @@ const ServerPage: React.FC = () => {
               <p>Создайте свою первую P2P комнату, чтобы стать сервером для друзей</p>
             </div>
           ) : (
-            <div className="rooms-grid">
-              {myP2PRooms.map((room) => (
+            <div className="rooms-slider-container">
+              <div className="rooms-slider" ref={sliderRef}>
+                {myP2PRooms.map((room) => (
                 <div key={room.roomKey} className="p2p-room-card">
                   <div className="room-header">
                     <h3>{room.name}</h3>
@@ -325,30 +404,31 @@ const ServerPage: React.FC = () => {
                   )}
                 </div>
               ))}
+              </div>
+              
+              {myP2PRooms.length > 1 && (
+                <div className="slider-controls">
+                  <button 
+                    className="slider-btn" 
+                    onClick={() => scrollSlider('left')}
+                    disabled={loading}
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <button 
+                    className="slider-btn" 
+                    onClick={() => scrollSlider('right')}
+                    disabled={loading}
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
-
-        <div className="server-benefits">
-          <h2>🚀 Преимущества P2P подхода</h2>
-          <div className="benefits-grid">
-            <div className="benefit-card">
-              <div className="benefit-icon">⚡</div>
-              <h3>Минимальная задержка</h3>
-              <p>Прямое соединение между участниками без промежуточного сервера</p>
-            </div>
-            <div className="benefit-card">
-              <div className="benefit-icon">🔗</div>
-              <h3>Децентрализация</h3>
-              <p>Каждый владелец комнаты становится сервером для своих друзей</p>
-            </div>
-            <div className="benefit-card">
-              <div className="benefit-icon">🔒</div>
-              <h3>Полный контроль</h3>
-              <p>Управление участниками, настройками и безопасностью</p>
-            </div>
-          </div>
         </div>
+
       </div>
     </div>
   )
