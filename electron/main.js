@@ -3,6 +3,27 @@ const path = require('path')
 const fs = require('fs')
 const express = require('express')
 const http = require('http')
+const os = require('os')
+
+// Создаем лог файл для диагностики
+const logPath = path.join(os.tmpdir(), 'speakaz-electron.log')
+function writeLog(message) {
+  const timestamp = new Date().toISOString()
+  const logMessage = `[${timestamp}] ${message}\n`
+  console.log(message)
+  try {
+    fs.appendFileSync(logPath, logMessage)
+  } catch (err) {
+    console.error('Failed to write log:', err)
+  }
+}
+
+writeLog('🚀 SpeakAz Electron starting...')
+writeLog(`📁 Log file: ${logPath}`)
+writeLog(`🔧 Node version: ${process.version}`)
+writeLog(`🔧 Electron version: ${process.versions.electron}`)
+writeLog(`🔧 Platform: ${process.platform}`)
+writeLog(`🔧 Arch: ${process.arch}`)
 
 // Определяем режим разработки без внешней зависимости
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
@@ -16,6 +37,22 @@ let memoryMonitorTimer = null
 // Настройка безопасности
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 
+// Обработка неперехваченных ошибок
+process.on('uncaughtException', (error) => {
+  writeLog(`❌ Uncaught Exception: ${error.message}`)
+  writeLog(`Stack: ${error.stack}`)
+  
+  dialog.showErrorBox('Критическая ошибка SpeakAz', 
+    `Произошла неожиданная ошибка:\n\n${error.message}\n\nЛог файл: ${logPath}`)
+})
+
+process.on('unhandledRejection', (reason, promise) => {
+  writeLog(`❌ Unhandled Rejection at: ${promise}, reason: ${reason}`)
+  
+  dialog.showErrorBox('Ошибка SpeakAz', 
+    `Произошла ошибка обработки:\n\n${reason}\n\nЛог файл: ${logPath}`)
+})
+
 // Функция мониторинга памяти
 function startMemoryMonitoring() {
   memoryMonitorTimer = setInterval(() => {
@@ -23,16 +60,11 @@ function startMemoryMonitoring() {
       const memoryInfo = process.getProcessMemoryInfo()
       const systemMemory = process.getSystemMemoryInfo()
       
-      console.log('🧠 Memory Usage:', {
-        rss: Math.round(memoryInfo.residentSet / 1024 / 1024) + 'MB',
-        heapUsed: Math.round(memoryInfo.private / 1024 / 1024) + 'MB',
-        external: Math.round(memoryInfo.sharedWorkingSet / 1024 / 1024) + 'MB',
-        systemFree: Math.round(systemMemory.free / 1024 / 1024) + 'MB'
-      })
+      writeLog(`🧠 Memory Usage: RSS=${Math.round(memoryInfo.residentSet / 1024 / 1024)}MB, Heap=${Math.round(memoryInfo.private / 1024 / 1024)}MB, External=${Math.round(memoryInfo.sharedWorkingSet / 1024 / 1024)}MB, SystemFree=${Math.round(systemMemory.free / 1024 / 1024)}MB`)
       
       // Если память превышает 500MB, принудительно очищаем
       if (memoryInfo.residentSet > 500 * 1024 * 1024) {
-        console.warn('🧠 High memory usage detected, performing cleanup...')
+        writeLog('🧠 High memory usage detected, performing cleanup...')
         performMemoryCleanup()
       }
     }
@@ -95,7 +127,7 @@ function createLocalServer() {
       distPath = path.join(__dirname, '../dist')
     }
     
-    console.log('📁 Serving static files from:', distPath)
+    writeLog('📁 Serving static files from: ' + distPath)
     
     // Настраиваем статические файлы
     expressApp.use(express.static(distPath, {
@@ -116,12 +148,12 @@ function createLocalServer() {
     
     localServer = expressApp.listen(LOCAL_PORT, 'localhost', () => {
       const serverUrl = `http://localhost:${LOCAL_PORT}`
-      console.log('🌐 Local server started:', serverUrl)
+      writeLog('🌐 Local server started: ' + serverUrl)
       resolve(serverUrl)
     })
     
     localServer.on('error', (err) => {
-      console.error('❌ Local server error:', err)
+      writeLog('❌ Local server error: ' + err.message)
       reject(err)
     })
   })
@@ -294,8 +326,10 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()
     
-    // Принудительно открываем DevTools для диагностики
-    mainWindow.webContents.openDevTools({ mode: 'detach' })
+    // Открываем DevTools только в режиме разработки
+    if (isDev) {
+      mainWindow.webContents.openDevTools({ mode: 'detach' })
+    }
   })
 
   // Добавляем обработчики для диагностики
@@ -522,6 +556,12 @@ function createMenu() {
 
 // Обработчики событий приложения
 app.whenReady().then(() => {
+  console.log('🚀 App is ready, starting initialization...')
+  console.log('🔧 isDev:', isDev)
+  console.log('🔧 isPackaged:', app.isPackaged)
+  console.log('📁 __dirname:', __dirname)
+  console.log('📁 process.resourcesPath:', process.resourcesPath)
+  
   // Настраиваем файловый протокол (если нужен)
   // setupFileProtocol()
 
@@ -537,14 +577,26 @@ app.whenReady().then(() => {
     if (fs.existsSync(assetsPath)) {
       console.log('📁 Assets contents:', fs.readdirSync(assetsPath))
     }
+  } else {
+    console.error('❌ Dist folder not found! This will cause loading issues.')
   }
 
-  createWindow()
-  createTray()
-  createMenu()
-  
-  // Запускаем мониторинг памяти
-  startMemoryMonitoring()
+  try {
+    createWindow()
+    createTray()
+    createMenu()
+    
+    // Запускаем мониторинг памяти
+    startMemoryMonitoring()
+    
+    console.log('✅ All components initialized successfully')
+  } catch (error) {
+    console.error('❌ Error during initialization:', error)
+    
+    // Показываем диалог с ошибкой
+    dialog.showErrorBox('Ошибка запуска SpeakAz', 
+      `Не удалось запустить приложение:\n\n${error.message}\n\nПожалуйста, переустановите приложение.`)
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -554,6 +606,10 @@ app.whenReady().then(() => {
       mainWindow.focus()
     }
   })
+}).catch(error => {
+  console.error('❌ Fatal error during app ready:', error)
+  dialog.showErrorBox('Критическая ошибка', 
+    `Не удалось инициализировать приложение:\n\n${error.message}`)
 })
 
 app.on('window-all-closed', () => {

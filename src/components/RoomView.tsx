@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import roomWebSocketService from '../services/RoomWebSocketService'
 import webRTCService from '../services/WebRTCService'
 import { getUserIdFromToken } from '../utils/jwt'
+import { preloadSounds, playJoinSound, playLeaveSound, clearSoundCache, setSoundVolume } from '../utils/soundUtils'
 import { 
   Mic, 
   MicOff, 
@@ -100,6 +101,10 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
 
     console.log('RoomView: Auth token found, connecting WebSocket');
     isInitializedRef.current = true;
+
+    // Предзагружаем звуки для быстрого воспроизведения
+    console.log('🔊 Preloading room sounds...');
+    preloadSounds();
 
     // WebSocket подключение к комнате (всегда используем room.roomKey, не URL параметр)
     const actualRoomKey = room.roomKey;
@@ -281,6 +286,13 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
         const exists = prev.some(p => p.userId === userId);
         if (!exists) {
           console.log('🎵 RoomView: Adding new participant to state:', participantData);
+          
+          // Проигрываем звук входа (только если это не текущий пользователь)
+          if (userId !== user?.id) {
+            console.log('🔊 Playing join sound for participant:', username);
+            playJoinSound();
+          }
+          
           return [...prev, participantData];
         }
         console.log('🎵 RoomView: Participant already exists in state');
@@ -295,9 +307,19 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
       console.log('🚪 RoomView: Participant left event received:', message);
       console.log('🚪 RoomView: Current participants before removal:', participants.map(p => ({ userId: p.userId, username: p.username })));
       
+      // Найдем участника перед удалением для получения имени
+      const leavingParticipant = participants.find(p => p.userId === message.userId);
+      
       setParticipants(prev => {
         const filtered = prev.filter(p => p.userId !== message.userId);
         console.log('🚪 RoomView: Participants after removal:', filtered.map(p => ({ userId: p.userId, username: p.username })));
+        
+        // Проигрываем звук выхода (только если это не текущий пользователь)
+        if (message.userId !== user?.id && leavingParticipant) {
+          console.log('🔊 Playing leave sound for participant:', leavingParticipant.username);
+          playLeaveSound();
+        }
+        
         return filtered;
       });
       
@@ -530,6 +552,10 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
         audioCleanupTimerRef.current = null;
       }
 
+      // Очищаем звуковой кэш
+      console.log('🔊 Clearing sound cache...');
+      clearSoundCache();
+
       // Убираем обработчик beforeunload
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
@@ -738,6 +764,41 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
               </p>
             </div>
           )}
+          
+          {/* Секция звуковых уведомлений */}
+          <div className="setting-item sound-settings">
+            <div className="sound-header">
+              <span>🔊 Звуковые уведомления</span>
+            </div>
+            <div className="sound-controls">
+              <button 
+                onClick={() => playJoinSound()}
+                className="sound-test-btn join-sound"
+              >
+                🎵 Тест звука входа
+              </button>
+              <button 
+                onClick={() => playLeaveSound()}
+                className="sound-test-btn leave-sound"
+              >
+                🚪 Тест звука выхода
+              </button>
+            </div>
+            <div className="sound-volume">
+              <span>Громкость:</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                defaultValue="60"
+                onChange={(e) => setSoundVolume(parseInt(e.target.value) / 100)}
+                className="volume-slider"
+              />
+            </div>
+            <p className="sound-info">
+              Звуки проигрываются при входе и выходе участников из комнаты
+            </p>
+          </div>
         </div>
       )}
 
