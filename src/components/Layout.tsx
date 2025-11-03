@@ -79,6 +79,17 @@ const Layout: React.FC = () => {
             </svg>
             Создать комнату
           </Link>
+          
+          <Link 
+            to="/server"
+            className={`nav-item ${location.pathname === '/server' ? 'active' : ''}`}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M4 1h16c1.1 0 2 .9 2 2v6c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V3c0-1.1.9-2 2-2zm0 8h16c1.1 0 2 .9 2 2v6c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2v-6c0-1.1.9-2 2-2zm2-6v2h2V3H6zm0 8v2h2v-2H6z"/>
+            </svg>
+            Открыть сервер
+          </Link>
+          
           <Link 
             to="/join"
             className={`nav-item ${location.pathname === '/join' ? 'active' : ''}`}
@@ -88,6 +99,7 @@ const Layout: React.FC = () => {
             </svg>
             Присоединиться
           </Link>
+          
           {location.pathname.startsWith('/room/') && (
             <div className="nav-item active">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">

@@ -8,6 +8,7 @@ import CreateRoomPage from './pages/CreateRoomPage'
 import JoinRoomPage from './pages/JoinRoomPage'
 import RoomPage from './pages/RoomPage'
 import ApiTestPage from './pages/ApiTestPage'
+import ServerPage from './pages/ServerPage'
 import ProtectedRoute from './components/ProtectedRoute'
 import './App.css'
 
@@ -31,6 +32,7 @@ function App() {
             <Route path="join" element={<JoinRoomPage />} />
             <Route path="room/:roomKey" element={<RoomPage />} />
             <Route path="api-test" element={<ApiTestPage />} />
+            <Route path="server" element={<ServerPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
