@@ -45,6 +45,7 @@ export function playJoinSound(): void {
  * Воспроизводит звук выхода из комнаты
  */
 export function playLeaveSound(): void {
+  console.log('🔊 playLeaveSound() called');
   playSound('LEAVE')
 }
 
@@ -52,10 +53,20 @@ export function playLeaveSound(): void {
  * Воспроизводит указанный звук
  */
 function playSound(soundKey: string): void {
+  console.log(`🔊 playSound() called with key: ${soundKey}`);
+  
   try {
     const audio = audioCache.get(soundKey)
+    console.log(`🔊 Audio element found in cache: ${!!audio}`);
     
     if (audio) {
+      console.log(`🔊 Audio element state:`, {
+        readyState: audio.readyState,
+        paused: audio.paused,
+        volume: audio.volume,
+        src: audio.src
+      });
+      
       // Сбрасываем время воспроизведения на начало
       audio.currentTime = 0
       
@@ -65,19 +76,27 @@ function playSound(soundKey: string): void {
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
-            console.log(`🔊 Playing sound: ${soundKey}`)
+            console.log(`🔊 Successfully playing sound: ${soundKey}`)
           })
           .catch((error) => {
             console.warn(`Failed to play sound ${soundKey}:`, error)
           })
+      } else {
+        console.log(`🔊 Play promise is undefined for sound: ${soundKey}`)
       }
     } else {
       console.warn(`Sound not found in cache: ${soundKey}`)
+      console.log(`🔊 Available sounds in cache:`, Array.from(audioCache.keys()));
       
       // Fallback: создаем новый аудио элемент
-      const fallbackAudio = new Audio(SOUNDS[soundKey as keyof typeof SOUNDS])
+      const soundUrl = SOUNDS[soundKey as keyof typeof SOUNDS];
+      console.log(`🔊 Creating fallback audio with URL: ${soundUrl}`);
+      
+      const fallbackAudio = new Audio(soundUrl)
       fallbackAudio.volume = 0.6
-      fallbackAudio.play().catch(e => {
+      fallbackAudio.play().then(() => {
+        console.log(`🔊 Fallback audio played successfully: ${soundKey}`);
+      }).catch(e => {
         console.warn(`Fallback sound play failed:`, e)
       })
     }

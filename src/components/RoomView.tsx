@@ -310,16 +310,22 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
       // Найдем участника перед удалением для получения имени
       const leavingParticipant = participants.find(p => p.userId === message.userId);
       
+      // Проигрываем звук выхода ПЕРЕД обновлением состояния (только если это не текущий пользователь)
+      if (message.userId !== user?.id && leavingParticipant) {
+        console.log('🔊 Playing leave sound for participant:', leavingParticipant.username);
+        playLeaveSound();
+      } else {
+        console.log('🔊 Not playing leave sound - either current user or participant not found:', {
+          isCurrentUser: message.userId === user?.id,
+          participantFound: !!leavingParticipant,
+          userId: message.userId,
+          currentUserId: user?.id
+        });
+      }
+      
       setParticipants(prev => {
         const filtered = prev.filter(p => p.userId !== message.userId);
         console.log('🚪 RoomView: Participants after removal:', filtered.map(p => ({ userId: p.userId, username: p.username })));
-        
-        // Проигрываем звук выхода (только если это не текущий пользователь)
-        if (message.userId !== user?.id && leavingParticipant) {
-          console.log('🔊 Playing leave sound for participant:', leavingParticipant.username);
-          playLeaveSound();
-        }
-        
         return filtered;
       });
       
