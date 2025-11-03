@@ -40,6 +40,7 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
   const [pendingParticipants, setPendingParticipants] = useState<RoomParticipant[]>([])
   const isInitializedRef = useRef(false)
   const isLeavingRef = useRef(false) // Флаг для отслеживания собственного выхода
+  const processedLeaveEvents = useRef<Set<string>>(new Set()) // Для предотвращения дублирования событий выхода
   const heartbeatRef = useRef<NodeJS.Timeout>()
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map())
   const audioCleanupTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -317,6 +318,16 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
       const currentUserId = getUserIdFromToken();
       console.log('🚪 RoomView: Current user ID from token:', currentUserId);
       
+      // Создаем уникальный ключ для события (userId + timestamp в миллисекундах)
+      const eventKey = `${message.userId}_${Date.now()}`;
+      const shortEventKey = `${message.userId}_leave`; // Короткий ключ для проверки дублирования
+      
+      // ПРОВЕРКА НА ДУБЛИРОВАНИЕ: если уже обработали выход этого пользователя недавно
+      if (processedLeaveEvents.current.has(shortEventKey)) {
+        console.log('🔊 DUPLICATE leave event detected - ignoring:', message.userId);
+        return; // Игнорируем дублированное событие
+      }
+      
       // СТРОГАЯ ПРОВЕРКА: НЕ проигрываем звук если это текущий пользователь ИЛИ мы сами выходим
       if (message.userId === currentUserId || isLeavingRef.current) {
         console.log('🔊 NOT playing leave sound - this is the CURRENT USER leaving or we are leaving');
@@ -327,6 +338,16 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
         });
         return; // Выходим из функции, не проигрывая звук
       }
+      
+      // Добавляем в обработанные события
+      processedLeaveEvents.current.add(shortEventKey);
+      console.log('🚪 RoomView: Added to processed events:', shortEventKey);
+      
+      // Очищаем старые события через 5 секунд
+      setTimeout(() => {
+        processedLeaveEvents.current.delete(shortEventKey);
+        console.log('🚪 RoomView: Cleaned up processed event:', shortEventKey);
+      }, 5000);
       
       // Найдем участника перед удалением для получения имени
       const leavingParticipant = participants.find(p => p.userId === message.userId);
@@ -583,6 +604,10 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
       // Очищаем звуковой кэш
       console.log('🔊 Clearing sound cache...');
       clearSoundCache();
+
+      // Очищаем обработанные события выхода
+      console.log('🚪 Clearing processed leave events...');
+      processedLeaveEvents.current.clear();
 
       // Убираем обработчик beforeunload
       window.removeEventListener('beforeunload', handleBeforeUnload);
