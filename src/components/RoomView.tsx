@@ -39,6 +39,7 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
   const [webRTCInitialized, setWebRTCInitialized] = useState(false)
   const [pendingParticipants, setPendingParticipants] = useState<RoomParticipant[]>([])
   const isInitializedRef = useRef(false)
+  const isLeavingRef = useRef(false) // Флаг для отслеживания собственного выхода
   const heartbeatRef = useRef<NodeJS.Timeout>()
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map())
   const audioCleanupTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -316,22 +317,31 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
       const currentUserId = getUserIdFromToken();
       console.log('🚪 RoomView: Current user ID from token:', currentUserId);
       
+      // СТРОГАЯ ПРОВЕРКА: НЕ проигрываем звук если это текущий пользователь ИЛИ мы сами выходим
+      if (message.userId === currentUserId || isLeavingRef.current) {
+        console.log('🔊 NOT playing leave sound - this is the CURRENT USER leaving or we are leaving');
+        setParticipants(prev => {
+          const filtered = prev.filter(p => p.userId !== message.userId);
+          console.log('🚪 RoomView: Participants after removal (current user):', filtered.map(p => ({ userId: p.userId, username: p.username })));
+          return filtered;
+        });
+        return; // Выходим из функции, не проигрывая звук
+      }
+      
       // Найдем участника перед удалением для получения имени
       const leavingParticipant = participants.find(p => p.userId === message.userId);
       console.log('🚪 RoomView: Leaving participant found:', leavingParticipant);
       
-      // Проигрываем звук выхода ПЕРЕД обновлением состояния (только если это не текущий пользователь)
-      if (message.userId !== currentUserId && (leavingParticipant || message.username)) {
+      // Проигрываем звук выхода только для ДРУГИХ пользователей
+      if (leavingParticipant || message.username) {
         const participantName = leavingParticipant?.username || message.username || 'Unknown';
-        console.log('🔊 Playing leave sound for participant:', participantName);
+        console.log('🔊 Playing leave sound for OTHER participant:', participantName);
         playLeaveSound();
       } else {
-        console.log('🔊 Not playing leave sound - either current user or participant not found:', {
-          isCurrentUser: message.userId === currentUserId,
+        console.log('🔊 Not playing leave sound - participant not found:', {
           participantFound: !!leavingParticipant,
           hasUsername: !!message.username,
-          userId: message.userId,
-          currentUserId: currentUserId
+          userId: message.userId
         });
       }
       
@@ -599,6 +609,10 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
   const handleLeaveRoom = async () => {
     if (confirm('Вы уверены, что хотите покинуть комнату?')) {
       console.log('RoomView: Starting leave room process...')
+      
+      // Устанавливаем флаг что мы выходим (чтобы не проигрывать звук выхода для себя)
+      isLeavingRef.current = true;
+      console.log('🔊 Set isLeaving flag to true - will not play leave sound for self');
       
       // Сначала отправляем WebSocket уведомление для реал-тайм обновления
       try {
