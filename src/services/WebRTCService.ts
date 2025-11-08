@@ -462,15 +462,6 @@ class WebRTCService {
     }
   }
 
-  // Mute/unmute microphone
-  setMuted(muted: boolean): void {
-    if (this.localStream) {
-      this.localStream.getAudioTracks().forEach(track => {
-        track.enabled = !muted;
-      });
-      console.log('WebRTCService: Microphone', muted ? 'muted' : 'unmuted');
-    }
-  }
 
   // Set volume for remote streams
   setDeafened(deafened: boolean): void {
@@ -607,6 +598,59 @@ class WebRTCService {
   // Check if initialized
   isReady(): boolean {
     return this.isInitialized && this.localStream !== null;
+  }
+
+  // Toggle microphone mute/unmute
+  toggleMute(): boolean {
+    if (!this.localStream) {
+      console.warn('WebRTCService: Cannot toggle mute - no local stream');
+      return false;
+    }
+
+    const audioTracks = this.localStream.getAudioTracks();
+    if (audioTracks.length === 0) {
+      console.warn('WebRTCService: Cannot toggle mute - no audio tracks');
+      return false;
+    }
+
+    const audioTrack = audioTracks[0];
+    audioTrack.enabled = !audioTrack.enabled;
+    
+    console.log('🎤 WebRTCService: Microphone', audioTrack.enabled ? 'unmuted' : 'muted');
+    return !audioTrack.enabled; // Return true if muted, false if unmuted
+  }
+
+  // Set microphone mute state
+  setMuted(muted: boolean): void {
+    if (!this.localStream) {
+      console.warn('WebRTCService: Cannot set mute - no local stream');
+      return;
+    }
+
+    const audioTracks = this.localStream.getAudioTracks();
+    if (audioTracks.length === 0) {
+      console.warn('WebRTCService: Cannot set mute - no audio tracks');
+      return;
+    }
+
+    const audioTrack = audioTracks[0];
+    audioTrack.enabled = !muted;
+    
+    console.log('🎤 WebRTCService: Microphone set to', muted ? 'muted' : 'unmuted');
+  }
+
+  // Get current mute state
+  isMuted(): boolean {
+    if (!this.localStream) {
+      return true; // Consider as muted if no stream
+    }
+
+    const audioTracks = this.localStream.getAudioTracks();
+    if (audioTracks.length === 0) {
+      return true; // Consider as muted if no audio tracks
+    }
+
+    return !audioTracks[0].enabled;
   }
 
   // Get current state for debugging

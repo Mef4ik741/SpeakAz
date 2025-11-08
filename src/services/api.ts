@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { Room, CreateRoomRequest, JoinRoomRequest } from '../types/Room'
 
-const API_URL = import.meta.env.REACT_APP_API_URL || 'https://leola-unengraven-gristly.ngrok-free.dev'
+const API_URL = import.meta.env.REACT_APP_API_URL || 'https://speakaz-backend.onrender.com'
 
 const api = axios.create({
   baseURL: API_URL,

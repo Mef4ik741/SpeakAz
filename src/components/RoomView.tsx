@@ -7,6 +7,9 @@ import roomWebSocketService from '../services/RoomWebSocketService'
 import webRTCService from '../services/WebRTCService'
 import { getUserIdFromToken } from '../utils/jwt'
 import { preloadSounds, playJoinSound, playLeaveSound, clearSoundCache, setSoundVolume } from '../utils/soundUtils'
+import { useHotkeys, HotkeyConfig } from '../hooks/useHotkeys'
+import { useHotkeySettings } from '../hooks/useHotkeySettings'
+import HotkeySettings from './HotkeySettings'
 import { 
   Mic, 
   MicOff, 
@@ -35,6 +38,7 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
   const [error, setError] = useState('')
   const [errorType, setErrorType] = useState<'general' | 'room-not-found'>('general')
   const [showSettings, setShowSettings] = useState(false)
+  const [showHotkeySettings, setShowHotkeySettings] = useState(false)
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map())
   const [webRTCInitialized, setWebRTCInitialized] = useState(false)
   const [pendingParticipants, setPendingParticipants] = useState<RoomParticipant[]>([])
@@ -45,8 +49,57 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map())
   const audioCleanupTimerRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Настройки горячих клавиш
+  const hotkeySettings = useHotkeySettings()
+
   const currentUser = participants.find(p => p.userId === user?.id)
   const isOwner = currentUser?.isOwner || false
+
+  // Обработчики для настроек горячих клавиш
+  const handleHotkeySave = () => {
+    console.log('🔥 Hotkey settings saved successfully');
+    setShowHotkeySettings(false);
+  };
+
+  const handleHotkeyReset = () => {
+    hotkeySettings.resetSettings();
+    console.log('🔥 Hotkey settings reset to defaults');
+  };
+
+  // Настройка горячих клавиш - должна быть на верхнем уровне компонента
+  const hotkeys: HotkeyConfig[] = [
+    {
+      key: hotkeySettings.settings.micHotkey,
+      callback: () => {
+        if (!webRTCService.isReady()) {
+          console.warn('RoomView: Cannot toggle mute - WebRTC not ready');
+          return;
+        }
+        const newMutedState = webRTCService.toggleMute();
+        setIsMuted(newMutedState);
+        console.log('🎤 RoomView: Microphone toggled via hotkey, muted:', newMutedState);
+      },
+      description: 'Переключить микрофон'
+    },
+    {
+      key: hotkeySettings.settings.deafenHotkey,
+      callback: () => {
+        const newDeafenedState = !isDeafened;
+        setIsDeafened(newDeafenedState);
+        
+        // Отключаем/включаем все удаленные аудио потоки
+        audioElementsRef.current.forEach((audioElement) => {
+          audioElement.muted = newDeafenedState;
+        });
+        
+        console.log('🔊 RoomView: Audio output toggled via hotkey, deafened:', newDeafenedState);
+      },
+      description: 'Переключить звук'
+    }
+  ].filter(hotkey => hotkey.key && hotkey.key.trim() !== ''); // Фильтруем пустые горячие клавиши
+
+  // Активируем горячие клавиши только если настройки загружены
+  useHotkeys(hotkeySettings.isLoaded ? hotkeys : []);
 
   // Функция для периодической очистки audio элементов
   const startAudioCleanup = () => {
@@ -122,6 +175,17 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
       setTimeout(() => onLeave(), 3000);
       return;
     }
+    
+    // Дополнительная проверка состояния комнаты перед подключением
+    console.log('🔍 RoomView: Verifying room state before WebSocket connection...');
+    console.log('🔍 Room data:', {
+      roomId: room.roomId,
+      roomKey: room.roomKey,
+      name: room.name,
+      currentParticipants: room.currentParticipants,
+      maxParticipants: room.maxParticipants,
+      isActive: room.isActive
+    });
     
     roomWebSocketService.joinRoom(actualRoomKey);
 
@@ -460,8 +524,108 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
       console.log('Heartbeat acknowledged');
     };
 
+    // Функции управления микрофоном
+    const toggleMute = () => {
+      if (!webRTCService.isReady()) {
+        console.warn('RoomView: Cannot toggle mute - WebRTC not ready');
+        return;
+      }
+
+      const newMutedState = webRTCService.toggleMute();
+      setIsMuted(newMutedState);
+      console.log('🎤 RoomView: Microphone toggled, muted:', newMutedState);
+    };
+
+    const toggleDeafen = () => {
+      const newDeafenedState = !isDeafened;
+      setIsDeafened(newDeafenedState);
+      
+      // Отключаем/включаем все удаленные аудио потоки
+      audioElementsRef.current.forEach((audioElement) => {
+        audioElement.muted = newDeafenedState;
+      });
+      
+      console.log('🔊 RoomView: Audio output toggled, deafened:', newDeafenedState);
+    };
+
+    // Функции управления участниками
+    const handleMuteParticipant = async (participantId: string) => {
+      if (!isOwner) {
+        console.warn('RoomView: Only room owner can mute participants');
+        return;
+      }
+
+      try {
+        await roomAPI.muteParticipant(room.roomKey, participantId);
+        console.log('RoomView: Participant muted successfully:', participantId);
+        
+        // Обновляем локальное состояние
+        setParticipants(prev => 
+          prev.map(p => 
+            p.userId === participantId 
+              ? { ...p, isMuted: true }
+              : p
+          )
+        );
+      } catch (error) {
+        console.error('RoomView: Failed to mute participant:', error);
+      }
+    };
+
+    const handleKickParticipant = async (participantId: string) => {
+      if (!isOwner) {
+        console.warn('RoomView: Only room owner can kick participants');
+        return;
+      }
+
+      if (!confirm('Вы уверены, что хотите исключить этого участника?')) {
+        return;
+      }
+
+      try {
+        await roomAPI.kickParticipant(room.roomKey, participantId);
+        console.log('RoomView: Participant kicked successfully:', participantId);
+        // Участник будет удален через WebSocket событие participant_left
+      } catch (error) {
+        console.error('RoomView: Failed to kick participant:', error);
+      }
+    };
+
+    // Функции управления битрейтом
+    const handleBitrateChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const newBitrate = parseInt(event.target.value);
+      setBitrate(newBitrate);
+    };
+
+    const setBitrate = async (bitrate: number) => {
+      if (!isOwner) {
+        console.warn('RoomView: Only room owner can change bitrate');
+        return;
+      }
+
+      try {
+        await roomAPI.updateAudioBitrate(room.roomKey, bitrate);
+        console.log('RoomView: Audio bitrate updated to:', bitrate);
+        
+        // Обновляем локальное состояние
+        setRoom(prev => ({ ...prev, audioBitrate: bitrate }));
+        
+        // TODO: Отправляем WebSocket уведомление о изменении битрейта
+        // roomWebSocketService.sendAudioBitrateChanged(room.roomKey, bitrate);
+      } catch (error) {
+        console.error('RoomView: Failed to update bitrate:', error);
+      }
+    };
+
+
+
     const handleJoinRoomError = (message: any) => {
-      console.warn('🎵 RoomView: Join room error (may be duplicate request):', message.message);
+      console.warn('🎵 RoomView: Join room error received:', {
+        message: message.message,
+        roomKey: message.roomKey,
+        currentRoom: room?.roomKey,
+        timestamp: new Date().toISOString()
+      });
       
       // Не показываем ошибку пользователю, если это дублирующий запрос
       // Основная функциональность работает, это минорная проблема
@@ -473,19 +637,44 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
       // Обрабатываем специфические ошибки
       const errorMessage = message.message || 'Ошибка при подключении к комнате';
       
-      if (errorMessage.includes('не найдена') || errorMessage.includes('неактивна')) {
-        console.error('🎵 RoomView: Room not found or inactive, redirecting to rooms list');
-        setErrorType('room-not-found');
-        setError('Комната не найдена или была удалена из-за неактивности. Перенаправление на список комнат...');
+      if (errorMessage.includes('не найдена') || errorMessage.includes('неактивна') || 
+          errorMessage.includes('not found') || errorMessage.includes('inactive')) {
+        console.error('🎵 RoomView: Room not found or inactive, attempting recovery...');
         
-        // Автоматически перенаправляем на список комнат через 3 секунды
-        setTimeout(() => {
-          onLeave();
-        }, 3000);
+        // Попытка восстановления: проверяем актуальную информацию о комнате
+        const attemptRoomRecovery = async () => {
+          try {
+            console.log('🔄 Attempting to recover room information...');
+            const roomInfo = await roomAPI.getRoomInfo(room.roomKey);
+            
+            if (roomInfo.isSuccess && roomInfo.data) {
+              console.log('✅ Room recovery successful, retrying connection...');
+              // Обновляем информацию о комнате и пытаемся переподключиться
+              setTimeout(() => {
+                roomWebSocketService.joinRoom(room.roomKey);
+              }, 2000);
+              return;
+            }
+          } catch (error) {
+            console.error('❌ Room recovery failed:', error);
+          }
+          
+          // Если восстановление не удалось, перенаправляем
+          console.error('🎵 RoomView: Room recovery failed, redirecting to rooms list');
+          setErrorType('room-not-found');
+          setError('Комната не найдена или была удалена. Перенаправление на список комнат...');
+          
+          setTimeout(() => {
+            onLeave();
+          }, 3000);
+        };
+        
+        attemptRoomRecovery();
         return;
       }
       
       // Показываем ошибку только если это серьезная проблема
+      console.error('🎵 RoomView: General join room error:', errorMessage);
       setErrorType('general');
       setError(errorMessage);
     };
@@ -746,6 +935,52 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
     }
   };
 
+  // Показываем ошибку если она есть
+  if (error) {
+    return (
+      <div className="room-error">
+        <div className="error-content">
+          {errorType === 'room-not-found' ? (
+            <>
+              <div className="error-icon">🚫</div>
+              <h2>Комната недоступна</h2>
+              <p>{error}</p>
+              <div className="error-details">
+                <p><strong>Возможные причины:</strong></p>
+                <ul>
+                  <li>Комната была удалена из-за неактивности</li>
+                  <li>Владелец комнаты покинул её</li>
+                  <li>Произошла техническая ошибка сервера</li>
+                  <li>Неверный ключ комнаты</li>
+                </ul>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="error-icon">⚠️</div>
+              <h2>Ошибка подключения</h2>
+              <p>{error}</p>
+            </>
+          )}
+          
+          <div className="error-actions">
+            <button onClick={onLeave} className="btn btn-primary">
+              Вернуться к списку комнат
+            </button>
+            {errorType !== 'room-not-found' && (
+              <button 
+                onClick={() => window.location.reload()} 
+                className="btn btn-secondary"
+              >
+                Попробовать снова
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="room-view">
       <div className="room-header">
@@ -855,6 +1090,42 @@ const RoomView: React.FC<RoomViewProps> = ({ room: initialRoom, onLeave }) => {
             <p className="sound-info">
               Звуки проигрываются при входе и выходе участников из комнаты
             </p>
+          </div>
+
+          {/* Кнопка для настройки горячих клавиш */}
+          <div className="setting-item">
+            <button 
+              onClick={() => setShowHotkeySettings(true)}
+              className="hotkey-settings-btn"
+            >
+              ⌨️ Настроить горячие клавиши
+            </button>
+            <p className="hotkey-current">
+              Микрофон: <kbd>{hotkeySettings.settings.micHotkey ? hotkeySettings.settings.micHotkey.toUpperCase() : 'Не назначено'}</kbd> | 
+              Звук: <kbd>{hotkeySettings.settings.deafenHotkey ? hotkeySettings.settings.deafenHotkey.toUpperCase() : 'Не назначено'}</kbd>
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Модальное окно настройки горячих клавиш */}
+      {showHotkeySettings && (
+        <div className="hotkey-modal-overlay" onClick={() => setShowHotkeySettings(false)}>
+          <div className="hotkey-modal-content" onClick={(e) => e.stopPropagation()}>
+            <HotkeySettings
+              currentMicHotkey={hotkeySettings.settings.micHotkey}
+              currentDeafenHotkey={hotkeySettings.settings.deafenHotkey}
+              onMicHotkeyChange={hotkeySettings.setMicHotkey}
+              onDeafenHotkeyChange={hotkeySettings.setDeafenHotkey}
+              onSave={handleHotkeySave}
+              onReset={handleHotkeyReset}
+            />
+            <button 
+              onClick={() => setShowHotkeySettings(false)}
+              className="hotkey-close-btn"
+            >
+              ✕ Закрыть
+            </button>
           </div>
         </div>
       )}

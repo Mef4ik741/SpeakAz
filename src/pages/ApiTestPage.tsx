@@ -24,7 +24,7 @@ const ApiTestPage: React.FC = () => {
     setLoading(true)
     setTestResults([])
     
-    const apiUrl = import.meta.env.REACT_APP_API_URL || 'https://leola-unengraven-gristly.ngrok-free.dev'
+    const apiUrl = import.meta.env.REACT_APP_API_URL || 'https://speakaz-backend.onrender.com'
     addTestResult(`🌐 Testing API at: ${apiUrl}`)
     
     try {

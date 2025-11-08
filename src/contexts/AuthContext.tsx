@@ -48,7 +48,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (username: string, password: string) => {
     try {
-      const response = await fetch(`${import.meta.env.REACT_APP_API_URL || 'https://leola-unengraven-gristly.ngrok-free.dev'}/api/auth/LoginByUsername`, {
+      const response = await fetch(`${import.meta.env.REACT_APP_API_URL || 'https://speakaz-backend.onrender.com'}/api/auth/LoginByUsername`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -89,7 +89,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const register = async (username: string, password: string, confirmPassword: string) => {
     try {
-      const response = await fetch(`${import.meta.env.REACT_APP_API_URL || 'https://leola-unengraven-gristly.ngrok-free.dev'}/api/account/register`, {
+      const response = await fetch(`${import.meta.env.REACT_APP_API_URL || 'https://speakaz-backend.onrender.com'}/api/account/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

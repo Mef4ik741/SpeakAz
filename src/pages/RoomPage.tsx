@@ -52,7 +52,7 @@ const RoomPage: React.FC = () => {
         }
         
         // Полная диагностика API
-        const apiUrl = import.meta.env.REACT_APP_API_URL || 'https://leola-unengraven-gristly.ngrok-free.dev'
+        const apiUrl = import.meta.env.REACT_APP_API_URL || 'https://speakaz-backend.onrender.com'
         console.log('🔍 RoomPage - Starting comprehensive API diagnostics...')
         console.log('🌐 API URL:', apiUrl)
         

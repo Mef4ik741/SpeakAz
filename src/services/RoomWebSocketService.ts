@@ -28,7 +28,7 @@ class RoomWebSocketService {
 
     try {
       // WebSocket URL с авторизацией через query parameter
-      const wsUrl = `wss://leola-unengraven-gristly.ngrok-free.dev/ws/rooms?token=${encodeURIComponent(token)}`;
+      const wsUrl = `wss://speakaz-backend.onrender.com/ws/rooms?token=${encodeURIComponent(token)}`;
       console.log('RoomWebSocket: Attempting to connect to:', wsUrl);
       this.ws = new WebSocket(wsUrl);
 
