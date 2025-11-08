@@ -7,24 +7,29 @@ export const checkApiHealth = async (baseUrl: string): Promise<{
   try {
     console.log('🔍 Checking API health at:', baseUrl)
     
-    // Проверяем доступность Swagger UI
-    const swaggerResponse = await fetch(`${baseUrl}/swagger/index.html`, {
+    // Проверяем доступность Health endpoint
+    const healthResponse = await fetch(`${baseUrl}/api/health`, {
       method: 'GET',
-      mode: 'cors'
+      mode: 'cors',
+      headers: {
+        'Content-Type': 'application/json'
+      }
     })
     
-    console.log('📊 Swagger response status:', swaggerResponse.status)
+    console.log('📊 Health endpoint response status:', healthResponse.status)
     
-    if (swaggerResponse.ok) {
+    if (healthResponse.ok) {
+      const healthData = await healthResponse.json()
+      console.log('✅ Health endpoint response:', healthData)
       return {
         isHealthy: true,
-        status: swaggerResponse.status
+        status: healthResponse.status
       }
     } else {
       return {
         isHealthy: false,
-        status: swaggerResponse.status,
-        error: `Swagger UI недоступен: ${swaggerResponse.status}`
+        status: healthResponse.status,
+        error: `Health endpoint недоступен: ${healthResponse.status}`
       }
     }
   } catch (error: any) {
